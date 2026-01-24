@@ -1,1 +1,3 @@
-Template repo for a Marimo project.
+# marimo-template
+
+Template repo for Marimo projects
