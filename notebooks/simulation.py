@@ -9,7 +9,6 @@ def _():
     import marimo as mo
     import numpy as np
     import plotly.graph_objects as go
-    from plotly.subplots import make_subplots
     import sys
     sys.path.insert(0, ".")
 
@@ -20,7 +19,6 @@ def _():
         generate_demand_series,
         generate_price_series,
         go,
-        make_subplots,
         mo,
         np,
     )
@@ -28,85 +26,77 @@ def _():
 
 @app.cell
 def _(mo, np):
-    get_seed, set_seed = mo.state(42)
-    regenerate = mo.ui.run_button(
-        label="Regenerate",
-        on_change=lambda _: set_seed(int(np.random.randint(0, 100_000))),
+    get_price_seed, set_price_seed = mo.state(42)
+    regen_price = mo.ui.run_button(
+        label="Regenerate price",
+        on_change=lambda _: set_price_seed(int(np.random.randint(0, 100_000))),
     )
-    return get_seed, regenerate
+    return get_price_seed, regen_price
 
 
 @app.cell
-def _(regenerate):
-    regenerate
+def _(mo, np):
+    get_demand_seed, set_demand_seed = mo.state(42)
+    regen_demand = mo.ui.run_button(
+        label="Regenerate demand",
+        on_change=lambda _: set_demand_seed(int(np.random.randint(0, 100_000))),
+    )
+    return get_demand_seed, regen_demand
+
+
+@app.cell
+def _(SimulationParams, generate_price_series, get_price_seed):
+    _params = SimulationParams(seed=get_price_seed())
+    prices = generate_price_series(_params)
+    return (prices,)
+
+
+@app.cell
+def _(SimulationParams, generate_demand_series, get_demand_seed):
+    _params = SimulationParams(seed=get_demand_seed())
+    demand = generate_demand_series(_params)
+    return (demand,)
+
+
+@app.cell
+def _(go, mo, np, prices, regen_price):
+    _days = np.arange(1, len(prices) + 1)
+    _fig = go.Figure()
+    _fig.add_trace(go.Scatter(
+        x=_days,
+        y=prices,
+        mode="lines",
+        line=dict(color="#e07b39", width=1.5),
+    ))
+    _fig.update_layout(
+        title="Energy Price",
+        xaxis_title="Day of year",
+        yaxis_title="£/MWh",
+        height=350,
+        margin=dict(t=50, b=40, l=60, r=20),
+    )
+    mo.vstack([regen_price, _fig])
     return
 
 
 @app.cell
-def _(
-    SimulationParams,
-    generate_demand_series,
-    generate_price_series,
-    get_seed,
-    mo,
-):
-    _seed = get_seed()
-    _params = SimulationParams(seed=_seed)
-    _prices = generate_price_series(_params)
-    _demand = generate_demand_series(_params)
-    mo.output.replace(mo.md(f"Seed: **{_seed}**"))
-    prices = _prices
-    demand = _demand
-    return demand, prices
-
-
-@app.cell
-def _(demand, go, make_subplots, np, prices):
-    _days = np.arange(1, len(prices) + 1)
-
-    _fig = make_subplots(
-        rows=2,
-        cols=1,
-        shared_xaxes=True,
-        subplot_titles=("Energy Price", "Heat Demand"),
-        vertical_spacing=0.10,
-    )
-
-    _fig.add_trace(
-        go.Scatter(
-            x=_days,
-            y=prices,
-            mode="lines",
-            name="Price",
-            line=dict(color="#e07b39", width=1.5),
-        ),
-        row=1,
-        col=1,
-    )
-
-    _fig.add_trace(
-        go.Scatter(
-            x=_days,
-            y=demand,
-            mode="lines",
-            name="Heat demand",
-            line=dict(color="#4a90d9", width=1.5),
-        ),
-        row=2,
-        col=1,
-    )
-
-    _fig.update_yaxes(title_text="£/MWh", row=1, col=1)
-    _fig.update_yaxes(title_text="MWh/day", row=2, col=1)
-    _fig.update_xaxes(title_text="Day of year", row=2, col=1)
-
+def _(demand, go, mo, np, regen_demand):
+    _days = np.arange(1, len(demand) + 1)
+    _fig = go.Figure()
+    _fig.add_trace(go.Scatter(
+        x=_days,
+        y=demand,
+        mode="lines",
+        line=dict(color="#4a90d9", width=1.5),
+    ))
     _fig.update_layout(
-        height=550,
-        showlegend=False,
+        title="Heat Demand",
+        xaxis_title="Day of year",
+        yaxis_title="MWh/day",
+        height=350,
         margin=dict(t=50, b=40, l=60, r=20),
     )
-
-    _fig
+    mo.vstack([regen_demand, _fig])
     return
 
 
