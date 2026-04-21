@@ -13,4 +13,5 @@ dependencies = [
     "polars>=1.40.0",
 ]
 [tool.poe.tasks]
-notebook = "marimo edit notebooks"
+edit = "marimo edit notebooks"
+run = "marimo run notebooks/notebook.py"
