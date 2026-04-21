@@ -14,4 +14,4 @@ dependencies = [
 ]
 [tool.poe.tasks]
 edit = "marimo edit notebooks"
-run = "marimo run notebooks/notebook.py"
+run = "marimo run notebooks/simulation.py"

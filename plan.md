@@ -24,20 +24,28 @@ The optimisation is formulated as a Linear Programme (LP) solved with `cvxpy`.
 
 Implement a module `src/simulation.py` that generates synthetic price and demand time series.
 
-- [ ] Define a `SimulationParams` dataclass holding:
-  - Number of time steps `T` (e.g. 48 half-hourly steps = 24 hours)
-  - Diurnal price shape parameters (peak hours, amplitude)
-  - AR(1) noise parameters (`phi`, `sigma`) for price uncertainty
-  - Mean demand and demand noise standard deviation
+Uses **365 daily time steps** (one per day of the year) to model a full calendar year.
+Heat demand and energy prices both follow seasonal patterns peaking in winter.
+
+- [x] Define a `SimulationParams` dataclass holding:
+  - Number of time steps `T` (default 365 — one day per step)
+  - Price parameters: annual mean, seasonal amplitude, AR(1) coefficients (`phi`, `sigma`)
+  - Demand parameters: annual mean, seasonal amplitude, weekend reduction factor, noise std dev
+  - Forecast parameters: base error and per-step growth in forecast uncertainty
   - Random seed for reproducibility
-- [ ] Implement `generate_price_series(params) -> np.ndarray` using an AR(1) process
-  superimposed on a smooth diurnal curve (e.g. double Gaussian for morning/evening peaks)
-- [ ] Implement `generate_demand_series(params) -> np.ndarray` with independent Gaussian noise
-- [ ] Implement `generate_price_forecast(true_prices, params) -> np.ndarray` that returns a
-  noisy forecast (used by MPC in place of true future prices); noise should grow with
-  forecast horizon to reflect realistic uncertainty
-- [ ] Write a standalone test (or marimo cell) that plots the true vs forecast price series
-  to verify the simulation visually
+- [x] Implement `generate_price_series(params) -> np.ndarray` using a seasonal cosine
+  (peaking on day 0 = 1 Jan, i.e. highest in winter) superimposed with AR(1) correlated noise;
+  prices clipped to a minimum of £1/MWh
+- [x] Implement `generate_demand_series(params) -> np.ndarray` with a seasonal cosine
+  (winter peak) multiplied by a weekend reduction factor (`t % 7` proxy for day-of-week),
+  plus independent Gaussian noise; demand clipped to a minimum of 0 MWh/day
+- [x] Implement `generate_price_forecast(true_prices, params) -> np.ndarray` returning a
+  `(T, T)` matrix where `forecast[t, h]` is the price forecast for day `t+h` made at day `t`;
+  noise grows linearly with horizon `h`
+- [x] Implement `get_forecast_window(t, H, true_prices, params) -> np.ndarray` convenience
+  wrapper returning a 1-D array of length `H` for use in the MPC loop
+- [x] Verified via `__main__` block: winter prices ~108 £/MWh vs summer ~57 £/MWh;
+  winter demand ~69 MWh/day vs summer ~25 MWh/day; weekend demand ~19% lower than weekday
 
 ---
 
