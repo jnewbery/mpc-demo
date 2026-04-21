@@ -1,3 +1,3 @@
-# marimo-template
+# mpc-demo
 
-Template repo for Marimo projects
+Notebook showing an MPC with rolling horizon control of an energy storage system.
