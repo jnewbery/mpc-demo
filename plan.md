@@ -8,15 +8,15 @@ The optimisation is formulated as a Linear Programme (LP) solved with `cvxpy`.
 
 ## Stage 1: Project Setup
 
-- [ ] Initialise a `uv` project (`uv init mpc-storage-demo`)
-- [ ] Add core dependencies:
+- [x] Initialise a `uv` project (`uv init mpc-storage-demo`)
+- [x] Add core dependencies:
   - `marimo` — reactive notebook runtime
   - `cvxpy` — LP formulation and solving
   - `numpy` — numerical operations and scenario generation
-  - `pandas` — time-indexed results storage
+  - `polars` — time-indexed results storage
   - `plotly` — interactive visualisations
-- [ ] Create the top-level marimo notebook file: `notebook.py`
-- [ ] Add a `README.md` with a brief description of the demo and instructions for running it (`uv run marimo run notebook.py`)
+- [x] Create the marimo notebook file: `notebooks/notebook.py`
+- [x] Add a `README.md` with a brief description of the demo and instructions for running it (`poe run`)
 
 ---
 
