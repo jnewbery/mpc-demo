@@ -20,16 +20,16 @@ def _():
         generate_price_series,
         generate_demand_series,
         generate_price_forecast,
-        forecast_sigma,
+        generate_raw_price_forecast,
     )
 
     return (
         SimulationParams,
         dataclasses,
-        forecast_sigma,
         generate_demand_series,
         generate_price_forecast,
         generate_price_series,
+        generate_raw_price_forecast,
         generate_seasonal_demand,
         generate_seasonal_prices,
         go,
@@ -122,13 +122,13 @@ def _(mo, np):
 
 @app.cell
 def _(mo):
-    forecast_quality = mo.ui.slider(
-        start=0, stop=60, value=7, step=1,
-        label="Forecast accuracy (days of exact forecast)",
+    forecast_horizon = mo.ui.range_slider(
+        start=0, stop=90, value=[7, 30], step=1,
+        label="Forecast horizon: short-term / long-term (days)",
         show_value=True,
     )
-    forecast_quality
-    return (forecast_quality,)
+    forecast_horizon
+    return (forecast_horizon,)
 
 
 @app.cell
@@ -138,7 +138,7 @@ def _(
     generate_seasonal_prices,
     get_price_seed,
 ):
-    _params = SimulationParams(seed=get_price_seed())
+    _params = SimulationParams(seed=get_price_seed(), T=360)
     seasonal = generate_seasonal_prices(_params)
     prices = generate_price_series(_params)
     price_params = _params
@@ -148,15 +148,13 @@ def _(
 @app.cell
 def _(
     dataclasses,
-    forecast_quality,
-    forecast_sigma,
+    forecast_horizon,
     generate_price_forecast,
-    np,
+    generate_raw_price_forecast,
     price_params,
     prices,
 ):
-    _short = forecast_quality.value
-    _long = _short + 23
+    _short, _long = forecast_horizon.value
     _fparams = dataclasses.replace(
         price_params,
         forecast_short_term=_short,
@@ -164,8 +162,8 @@ def _(
     )
     _forecast_matrix = generate_price_forecast(prices, _fparams)
     price_forecast = _forecast_matrix[0, :]
-    price_forecast_sigma = forecast_sigma(np.arange(len(prices)), _fparams)
-    return price_forecast, price_forecast_sigma
+    price_forecast_raw = generate_raw_price_forecast(prices, _fparams)
+    return price_forecast, price_forecast_raw
 
 
 @app.cell
@@ -187,7 +185,7 @@ def _(
     mo,
     np,
     price_forecast,
-    price_forecast_sigma,
+    price_forecast_raw,
     prices,
     regen_price,
     seasonal,
@@ -195,20 +193,6 @@ def _(
     _days = np.arange(1, len(prices) + 1)
 
     _fig = go.Figure()
-
-    # Uncertainty band (±1σ around seasonal)
-    _fig.add_trace(go.Scatter(
-        x=np.concatenate([_days, _days[::-1]]),
-        y=np.concatenate([
-            seasonal + price_forecast_sigma,
-            np.maximum(0, seasonal - price_forecast_sigma)[::-1],
-        ]),
-        fill="toself",
-        fillcolor="rgba(100, 160, 220, 0.15)",
-        line=dict(width=0),
-        name="Seasonal ±1σ",
-        hoverinfo="skip",
-    ))
 
     # Seasonal baseline
     _fig.add_trace(go.Scatter(
@@ -219,7 +203,16 @@ def _(
         line=dict(color="#4a90d9", width=1.5, dash="dash"),
     ))
 
-    # Forecast line
+    # Raw deviation (unblended forecast)
+    _fig.add_trace(go.Scatter(
+        x=_days,
+        y=price_forecast_raw,
+        mode="lines",
+        name="Raw forecast (unblended)",
+        line=dict(color="grey", width=1, dash="dot"),
+    ))
+
+    # Blended forecast line
     _fig.add_trace(go.Scatter(
         x=_days,
         y=price_forecast,

@@ -178,6 +178,43 @@ def _forecast_deviation(
     return dev
 
 
+def generate_raw_price_forecast(
+    true_prices: np.ndarray,
+    params: SimulationParams,
+) -> np.ndarray:
+    """Return the unblended forecast from t=0: tracks true price up to H_short,
+    then random-walks from that point onward.
+
+    For h ≤ H_short the raw forecast equals the true price (perfect short-term
+    knowledge). For h > H_short it drifts as a random walk, showing what the
+    deviation would look like without the α(h) blend pulling it toward seasonal.
+
+    Returns
+    -------
+    np.ndarray of shape (T,) — raw forecast from t=0 for all horizons.
+    """
+    T = len(true_prices)
+    s = _seasonal_at(np.arange(T), params)
+
+    phi = params.price_ar1_phi
+    sigma_stationary = params.price_ar1_sigma / np.sqrt(1 - phi ** 2)
+    sigma_step = sigma_stationary / np.sqrt(max(1, params.forecast_long_term))
+    rng = np.random.default_rng(params.seed + 2)
+
+    H_short = min(params.forecast_short_term, T - 1)
+    dev = np.empty(T)
+
+    # Short-term: exact knowledge of true deviations
+    for h in range(H_short + 1):
+        dev[h] = true_prices[h] - s[h]
+
+    # Beyond short-term: random walk from the last known deviation
+    for h in range(H_short + 1, T):
+        dev[h] = dev[h - 1] + rng.standard_normal() * sigma_step
+
+    return s + dev
+
+
 def generate_price_forecast(
     true_prices: np.ndarray,
     params: SimulationParams,
