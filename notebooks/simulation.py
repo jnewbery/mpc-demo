@@ -55,6 +55,10 @@ def _(mo):
 
     where $\mu$ is the annual mean price and $A$ is the seasonal amplitude.
 
+    The heat demand baseline follows the same cosine structure, but is additionally scaled by a weekend multiplier $m_t$ to capture the systematic reduction in demand on non-working days:
+
+    $$S^D_t = \left(\mu_D + A_D \cos\!\left(\frac{2\pi t}{365}\right)\right) \cdot m_t, \qquad m_t = \begin{cases} 0.8 & t \bmod 7 \in \{5, 6\} \\ 1.0 & \text{otherwise} \end{cases}$$
+
     ---
 
     ## True price
@@ -63,13 +67,13 @@ def _(mo):
 
     $$\varepsilon_t = \phi\,\varepsilon_{t-1} + \sigma z_t, \qquad z_t \overset{\text{iid}}{\sim} \mathcal{N}(0,1)$$
 
-    $$P_t = \max\!\left(1,\; S_t + \varepsilon_t\right)$$
+    $$P_t = \max\!\left(0,\; S_t + \varepsilon_t\right)$$
 
     The unconditional standard deviation of the noise is $\sigma_\infty = \sigma / \sqrt{1 - \phi^2}$.
 
-    **Heat demand** follows the same structure — a seasonal cosine plus Gaussian noise — with an additional weekend multiplier $m_t$ (0.8 on Saturdays and Sundays, 1.0 otherwise):
+    True heat demand follows the same AR(1) structure on top of its seasonal baseline, with $\phi_D = 0.90$ reflecting the stronger day-to-day persistence of weather systems:
 
-    $$D_t = \max\!\left(0,\; \bigl(\mu_D + A_D \cos\tfrac{2\pi t}{365}\bigr)\cdot m_t + \eta_t\right), \qquad \eta_t \sim \mathcal{N}(0, \sigma_D^2)$$
+    $$\delta_t = \phi_D\,\delta_{t-1} + \sigma_D z_t, \qquad D_t = \max\!\left(0,\; S^D_t + \delta_t\right)$$
 
     ---
 
