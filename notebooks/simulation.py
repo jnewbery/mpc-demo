@@ -16,6 +16,7 @@ def _():
     from src.simulation import (
         SimulationParams,
         generate_seasonal_prices,
+        generate_seasonal_demand,
         generate_price_series,
         generate_demand_series,
         generate_price_forecast,
@@ -29,11 +30,70 @@ def _():
         generate_demand_series,
         generate_price_forecast,
         generate_price_series,
+        generate_seasonal_demand,
         generate_seasonal_prices,
         go,
         mo,
         np,
     )
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    # Simulation
+
+    Three time series are generated over a 365-day year ($t = 0$ $\implies$ 1 January).
+
+    ---
+
+    ## Seasonal baseline
+
+    The smooth annual price cycle is a cosine with a winter peak:
+
+    $$S_t = \mu + A \cos\!\left(\frac{2\pi t}{365}\right)$$
+
+    where $\mu$ is the annual mean price and $A$ is the seasonal amplitude.
+
+    ---
+
+    ## True price
+
+    Day-to-day price variability is modelled as an AR(1) process layered on top of the seasonal baseline:
+
+    $$\varepsilon_t = \phi\,\varepsilon_{t-1} + \sigma z_t, \qquad z_t \overset{\text{iid}}{\sim} \mathcal{N}(0,1)$$
+
+    $$P_t = \max\!\left(1,\; S_t + \varepsilon_t\right)$$
+
+    The unconditional standard deviation of the noise is $\sigma_\infty = \sigma / \sqrt{1 - \phi^2}$.
+
+    **Heat demand** follows the same structure — a seasonal cosine plus Gaussian noise — with an additional weekend multiplier $m_t$ (0.8 on Saturdays and Sundays, 1.0 otherwise):
+
+    $$D_t = \max\!\left(0,\; \bigl(\mu_D + A_D \cos\tfrac{2\pi t}{365}\bigr)\cdot m_t + \eta_t\right), \qquad \eta_t \sim \mathcal{N}(0, \sigma_D^2)$$
+
+    ---
+
+    ## Price forecast
+
+    A forecast made at time $t$ for horizon $h$ is constructed in two steps.
+
+    **Step 1 — forecast deviation random walk.**
+    The forecaster knows the current deviation from seasonal exactly, then projects it forward with growing uncertainty:
+
+    $$\hat{d}_0 = P_t - S_t, \qquad \hat{d}_h = \hat{d}_{h-1} + \sigma_\text{step}\, z_h$$
+
+    where $\sigma_\text{step} = \sigma_\infty / \sqrt{H_\text{long}}$ is calibrated so that the forecast uncertainty reaches $\sigma_\infty$ by the long-term horizon $H_\text{long}$. Because the walk is independent of the true future prices, the forecast can drift further from the seasonal average than the true price does.
+
+    **Step 2 — blend toward the seasonal average.**
+    The prediction weights the forecast deviation against the seasonal baseline via a blending weight $\alpha(h)$:
+
+    $$\hat{P}_{t+h} = S_{t+h} + \alpha(h)\,\hat{d}_h$$
+
+    $$\alpha(h) = \begin{cases} 1 & h \le H_\text{short} \\ \dfrac{1}{2}\!\left(1 + \cos\!\left(\pi\,\dfrac{h - H_\text{short}}{H_\text{long} - H_\text{short}}\right)\right) & H_\text{short} < h < H_\text{long} \\ 0 & h \ge H_\text{long} \end{cases}$$
+
+    For $h \le H_\text{short}$ the forecast deviation is weighted fully, so the prediction closely tracks the true price. For $h \ge H_\text{long}$ the weight is zero, so the prediction equals the seasonal average. The **forecast accuracy** slider controls $H_\text{short}$, with $H_\text{long} = H_\text{short} + 23$.
+    """)
+    return
 
 
 @app.cell
@@ -105,10 +165,16 @@ def _(
 
 
 @app.cell
-def _(SimulationParams, generate_demand_series, get_demand_seed):
+def _(
+    SimulationParams,
+    generate_demand_series,
+    generate_seasonal_demand,
+    get_demand_seed,
+):
     _params = SimulationParams(seed=get_demand_seed())
+    seasonal_demand = generate_seasonal_demand(_params)
     demand = generate_demand_series(_params)
-    return (demand,)
+    return demand, seasonal_demand
 
 
 @app.cell
@@ -181,21 +247,35 @@ def _(
 
 
 @app.cell
-def _(demand, go, mo, np, regen_demand):
+def _(demand, go, mo, np, regen_demand, seasonal_demand):
     _days = np.arange(1, len(demand) + 1)
     _fig = go.Figure()
+
+    # Seasonal baseline
+    _fig.add_trace(go.Scatter(
+        x=_days,
+        y=seasonal_demand,
+        mode="lines",
+        name="Seasonal average",
+        line=dict(color="#4a90d9", width=1),
+    ))
+
+    # True demand
     _fig.add_trace(go.Scatter(
         x=_days,
         y=demand,
         mode="lines",
-        line=dict(color="#4a90d9", width=1.5),
+        name="True demand",
+        line=dict(color="#e07b39", width=1.5),
     ))
+
     _fig.update_layout(
         title="Heat Demand",
         xaxis_title="Day of year",
         yaxis_title="MWh/day",
-        height=350,
+        height=400,
         margin=dict(t=50, b=40, l=60, r=20),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
     )
     mo.vstack([regen_demand, _fig])
     return

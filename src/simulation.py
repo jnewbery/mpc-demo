@@ -26,7 +26,8 @@ class SimulationParams:
     demand_mean: float = 50.0           # MWh/day annual mean heat demand
     demand_seasonal_amp: float = 25.0   # winter peak amplitude (MWh/day)
     demand_weekend_factor: float = 0.80 # weekend demand relative to weekday
-    demand_noise_sigma: float = 5.0     # day-to-day Gaussian noise std dev (MWh/day)
+    demand_ar1_phi: float = 0.90        # AR(1) autocorrelation (weather persistence)
+    demand_noise_sigma: float = 5.0     # AR(1) innovation std dev (MWh/day)
     # Forecast parameters
     forecast_short_term: int = 7        # days: forecast matches true price exactly
     forecast_long_term: int = 30        # days: forecast equals seasonal average
@@ -46,6 +47,23 @@ def generate_seasonal_prices(params: SimulationParams) -> np.ndarray:
     )
 
 
+def generate_seasonal_demand(params: SimulationParams) -> np.ndarray:
+    """Generate the seasonal demand baseline including the weekend multiplier (no noise).
+
+    Returns
+    -------
+    np.ndarray of shape (T,), seasonal demand in MWh/day.
+    """
+    t = np.arange(params.T)
+    seasonal = params.demand_mean + params.demand_seasonal_amp * np.cos(
+        2 * np.pi * t / 365
+    )
+    day_of_week = t % 7
+    weekend_mask = (day_of_week == 5) | (day_of_week == 6)
+    multiplier = np.where(weekend_mask, params.demand_weekend_factor, 1.0)
+    return seasonal * multiplier
+
+
 def generate_price_series(params: SimulationParams) -> np.ndarray:
     """Generate a daily energy price series: seasonal baseline + AR(1) noise.
 
@@ -53,7 +71,7 @@ def generate_price_series(params: SimulationParams) -> np.ndarray:
 
     Returns
     -------
-    np.ndarray of shape (T,), prices in £/MWh, clipped to a minimum of 1.0.
+    np.ndarray of shape (T,), prices in £/MWh, clipped to a minimum of 0.0.
     """
     rng = np.random.default_rng(params.seed)
     seasonal = generate_seasonal_prices(params)
@@ -64,7 +82,7 @@ def generate_price_series(params: SimulationParams) -> np.ndarray:
     for i in range(1, params.T):
         noise[i] = params.price_ar1_phi * noise[i - 1] + innovations[i]
 
-    prices = np.maximum(1.0, seasonal + noise)
+    prices = np.maximum(0.0, seasonal + noise)
     return prices
 
 
@@ -90,7 +108,11 @@ def generate_demand_series(params: SimulationParams) -> np.ndarray:
     weekend_mask = (day_of_week == 5) | (day_of_week == 6)
     multiplier = np.where(weekend_mask, params.demand_weekend_factor, 1.0)
 
-    noise = rng.standard_normal(params.T) * params.demand_noise_sigma
+    # AR(1) noise: ε[t] = φ·ε[t-1] + σ·z[t]
+    innovations = rng.standard_normal(params.T) * params.demand_noise_sigma
+    noise = np.zeros(params.T)
+    for i in range(1, params.T):
+        noise[i] = params.demand_ar1_phi * noise[i - 1] + innovations[i]
 
     demand = np.maximum(0.0, seasonal * multiplier + noise)
     return demand
