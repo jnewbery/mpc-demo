@@ -156,24 +156,33 @@ def forecast_sigma(horizons: np.ndarray, params: SimulationParams) -> np.ndarray
 
 
 def _forecast_deviation(
-    current_deviation: float,
-    T: int,
+    t: int,
+    true_prices: np.ndarray,
+    H: int,
     params: SimulationParams,
     rng: np.random.Generator,
 ) -> np.ndarray:
-    """Generate a forward forecast deviation series (random walk from current state).
+    """Generate a forward forecast deviation series from time t over H steps.
 
-    Starts at current_deviation (h=0, exact knowledge) and random-walks with
-    per-step sigma calibrated so std reaches σ_stationary by forecast_long_term.
-    This allows the forecast to drift further from seasonal than the true price.
+    For h ≤ H_short: exact knowledge — deviation equals true_prices[t+h] − seasonal[t+h].
+    For h > H_short: random walk from the last known deviation, with per-step sigma
+    calibrated so the std reaches σ_stationary by forecast_long_term.
+
+    This shared deviation series is used by both generate_price_forecast (which applies
+    α(h) blending) and generate_raw_price_forecast (α=1 everywhere), guaranteeing that
+    the blended forecast always lies between the raw forecast and the seasonal average.
     """
+    T_full = len(true_prices)
+    H_short = min(params.forecast_short_term, H - 1)
     phi = params.price_ar1_phi
     sigma_stationary = params.price_ar1_sigma / np.sqrt(1 - phi ** 2)
     sigma_step = sigma_stationary / np.sqrt(max(1, params.forecast_long_term))
 
-    dev = np.empty(T)
-    dev[0] = current_deviation
-    for h in range(1, T):
+    dev = np.empty(H)
+    for h in range(H_short + 1):
+        idx = min(t + h, T_full - 1)
+        dev[h] = true_prices[idx] - _seasonal_at(np.array([t + h]), params)[0]
+    for h in range(H_short + 1, H):
         dev[h] = dev[h - 1] + rng.standard_normal() * sigma_step
     return dev
 
@@ -182,36 +191,21 @@ def generate_raw_price_forecast(
     true_prices: np.ndarray,
     params: SimulationParams,
 ) -> np.ndarray:
-    """Return the unblended forecast from t=0: tracks true price up to H_short,
-    then random-walks from that point onward.
+    """Return the unblended (α=1) forecast from t=0 for all horizons.
 
-    For h ≤ H_short the raw forecast equals the true price (perfect short-term
-    knowledge). For h > H_short it drifts as a random walk, showing what the
-    deviation would look like without the α(h) blend pulling it toward seasonal.
+    Tracks the true price exactly up to H_short, then random-walks. Because α=1
+    everywhere, this is the upper bound: blended forecast ≤ raw forecast when the
+    deviation is positive, and ≥ when negative. Seasonal average is the lower/upper
+    bound in the opposite direction.
 
     Returns
     -------
     np.ndarray of shape (T,) — raw forecast from t=0 for all horizons.
     """
     T = len(true_prices)
-    s = _seasonal_at(np.arange(T), params)
-
-    phi = params.price_ar1_phi
-    sigma_stationary = params.price_ar1_sigma / np.sqrt(1 - phi ** 2)
-    sigma_step = sigma_stationary / np.sqrt(max(1, params.forecast_long_term))
     rng = np.random.default_rng(params.seed + 2)
-
-    H_short = min(params.forecast_short_term, T - 1)
-    dev = np.empty(T)
-
-    # Short-term: exact knowledge of true deviations
-    for h in range(H_short + 1):
-        dev[h] = true_prices[h] - s[h]
-
-    # Beyond short-term: random walk from the last known deviation
-    for h in range(H_short + 1, T):
-        dev[h] = dev[h - 1] + rng.standard_normal() * sigma_step
-
+    dev = _forecast_deviation(0, true_prices, T, params, rng)
+    s = _seasonal_at(np.arange(T), params)
     return s + dev
 
 
@@ -221,15 +215,13 @@ def generate_price_forecast(
 ) -> np.ndarray:
     """Generate a forecast matrix using a blended random-walk model.
 
-    At each time t, a forecast deviation series is generated:
-      - Starts at true_prices[t] − seasonal[t]  (exact knowledge at h=0)
-      - Performs an independent random walk forward (can drift past true price)
+    At each time t a shared deviation series is generated (exact for h ≤ H_short,
+    random walk beyond). The prediction applies the blending weight α(h):
 
-    The prediction at horizon h is then:
-      prediction[t, h] = seasonal[t+h] + α(h) × forecast_dev[h]
+      prediction[t, h] = seasonal[t+h] + α(h) × dev[h]
 
-    where α(h) = 1 at short horizons (forecast weighted heavily) and 0 at long
-    horizons (prediction equals seasonal average).
+    Since α(h) ∈ [0, 1], the blended forecast is guaranteed to lie between the
+    raw forecast (α=1) and the seasonal average (α=0) at every horizon.
 
     Parameters
     ----------
@@ -242,15 +234,13 @@ def generate_price_forecast(
         forecast[t, h] is the price prediction for day t+h, made at day t.
     """
     T = len(true_prices)
-    seasonal = generate_seasonal_prices(params)
     horizons = np.arange(T)
     alpha = _forecast_alpha(horizons, params)
     rng = np.random.default_rng(params.seed + 2)
 
     forecast = np.zeros((T, T))
     for t in range(T):
-        current_dev = true_prices[t] - seasonal[t]
-        dev = _forecast_deviation(current_dev, T, params, rng)
+        dev = _forecast_deviation(t, true_prices, T, params, rng)
         s = _seasonal_at(t + horizons, params)
         forecast[t, :] = s + alpha * dev
 
@@ -263,9 +253,9 @@ def get_forecast_window(
     true_prices: np.ndarray,
     params: SimulationParams,
 ) -> np.ndarray:
-    """Return a 1-D forecast window of length H starting at time t.
+    """Return a 1-D blended forecast window of length H starting at time t.
 
-    Uses the same blended random-walk model as generate_price_forecast.
+    Uses the same deviation model as generate_price_forecast.
     Seeded per-timestep so each MPC window gets a consistent forecast.
 
     Parameters
@@ -279,10 +269,8 @@ def get_forecast_window(
     -------
     np.ndarray of shape (H,)
     """
-    seasonal_t = _seasonal_at(np.array([t]), params)[0]
-    current_dev = true_prices[t] - seasonal_t
     rng = np.random.default_rng(params.seed + 2 + t)
-    dev = _forecast_deviation(current_dev, H, params, rng)
+    dev = _forecast_deviation(t, true_prices, H, params, rng)
     horizons = np.arange(H)
     alpha = _forecast_alpha(horizons, params)
     s = _seasonal_at(t + horizons, params)
