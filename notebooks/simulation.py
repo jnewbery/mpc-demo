@@ -1,3 +1,8 @@
+"""
+Title: Simulation
+Description: A simple generative model of daily energy prices and heat demand, with a forecast.
+"""
+
 import marimo
 
 __generated_with = "0.23.2"

@@ -1,3 +1,8 @@
+"""
+Title: MPC controller
+Description: A rolling-horizon Model Predictive Control (MPC) strategy for the thermal energy storage problem.
+"""
+
 import marimo
 
 __generated_with = "0.23.2"

@@ -1,3 +1,8 @@
+"""
+Title: LP model
+Description: A perfect foresight benchmark for the thermal energy storage problem, solved with a Linear Programme (LP)
+"""
+
 import marimo
 
 __generated_with = "0.23.2"
