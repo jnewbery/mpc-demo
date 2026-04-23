@@ -35,10 +35,12 @@ Open `http://localhost:8080`.
 ## Deploy to Google Cloud Run
 
 ```bash
-gcloud builds submit --tag gcr.io/PROJECT_ID/mpc-demo
+PROJECT_ID=<your-gcp-project-id>
+REGION=<your-gcp-region>
+gcloud builds submit --tag gcr.io/$PROJECT_ID/mpc-demo
 gcloud run deploy mpc-demo \
-  --image gcr.io/PROJECT_ID/mpc-demo \
+  --image gcr.io/$PROJECT_ID/mpc-demo \
   --platform managed \
-  --region REGION \
+  --region $REGION \
   --allow-unauthenticated
 ```
