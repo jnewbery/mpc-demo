@@ -51,31 +51,37 @@ Heat demand and energy prices both follow seasonal patterns peaking in winter.
 
 ## Stage 3: LP Formulation
 
-Implement a module `src/storage_lp.py` containing the core optimisation model.
+Implemented in `src/storage_lp.py`.
 
-- [ ] Define a `StorageParams` dataclass holding:
-  - Capacity `s_max` (MWh)
-  - Minimum SoC `s_min` (MWh, e.g. 10% of capacity)
-  - Maximum charge rate `u_plus_max` (MW)
-  - Maximum discharge rate `u_minus_max` (MW)
-  - Charge efficiency `eta_plus`
-  - Discharge efficiency `eta_minus`
-  - Initial SoC `s0`
-- [ ] Implement `solve_perfect_foresight(prices, storage_params) -> dict`:
-  - Variables: `u_plus[t]`, `u_minus[t]` (charge/discharge rates), `s[t]` (SoC)
-  - Objective: minimise total cost `sum(prices[t] * (u_plus[t] - u_minus[t]))`
-    (negative cost = revenue from discharging at high prices)
+The system models a heat pump connected to thermal storage. The heat pump is the sole
+heat source; its output must satisfy the demand balance at every time step:
+`hp[t] = demand[t] + u_plus[t] - u_minus[t]`. Electricity cost is `prices[t] * hp[t] / COP`.
+
+- [x] Define a `StorageParams` dataclass holding:
+  - `s_max`, `s_min` (MWh) — storage capacity bounds
+  - `s0` (MWh) — initial state of charge
+  - `u_plus_max`, `u_minus_max` (MWh/day) — charge/discharge rate limits
+  - `eta` — round-trip discharge efficiency (applied on discharge: `u_minus / eta`)
+  - `cop` — heat pump coefficient of performance
+  - `h_max` (MWh/day) — maximum heat pump output (grid/equipment cap)
+- [x] Implement `solve_perfect_foresight(prices, demand, storage_params) -> dict`:
+  - Variables: `u_plus[t]`, `u_minus[t]`, `s[t]`
+  - Objective: minimise `sum(prices[t] * (demand[t] + u_plus[t] - u_minus[t]) / COP)`
   - Constraints:
-    - SoC dynamics: `s[t+1] == s[t] + eta_plus * u_plus[t] - u_minus[t] / eta_minus`
-    - `s_min <= s[t] <= s_max` for all `t`
+    - SoC dynamics: `s[t+1] == s[t] + u_plus[t] - u_minus[t] / eta`
+    - `s_min <= s[t] <= s_max` for all `t`; `s[0] == s0`
     - `0 <= u_plus[t] <= u_plus_max` for all `t`
     - `0 <= u_minus[t] <= u_minus_max` for all `t`
-    - `s[0] == s0`
-  - Return a dict with keys: `soc`, `charge`, `discharge`, `cost`, `status`
-- [ ] Implement `solve_single_window(prices_forecast, s_current, storage_params) -> dict`
-  for a single MPC window solve (same LP over a horizon of length `H`); return the
+    - Demand balance / HP bounds: `0 <= demand[t] + u_plus[t] - u_minus[t] <= h_max`
+  - Returns dict with keys: `soc`, `charge`, `discharge`, `hp_output`, `cost`, `status`
+- [x] Implement `solve_single_window(prices_forecast, demand_forecast, s_current, storage_params) -> dict`
+  for a single MPC window solve (same LP over a horizon of length `H`); returns the
   full planned trajectory but only the first action will be applied
-- [ ] Handle infeasible/solver-error cases gracefully with clear error messages
+- [x] Raises `ValueError` with solver status if cvxpy returns a non-optimal result
+- [x] Verified via `__main__` block: perfect foresight saves ~3.5% vs no-storage baseline;
+  all SoC, charge/discharge, and HP output constraints satisfied
+- [x] Created `notebooks/lp.py` demonstrating the LP with interactive parameter sliders
+  and three charts: dispatch schedule, state of charge, and cumulative cost vs baseline
 
 ---
 
