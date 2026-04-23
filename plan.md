@@ -111,46 +111,41 @@ year so the window never extends beyond the simulation.
 
 ---
 
-## Stage 5: Marimo Notebook
+## Stage 5: Marimo Notebooks
 
-Build the interactive demo in `notebook.py`.
+Rather than a single `notebook.py`, the demo was split into three focused notebooks,
+each with its own parameter panel, plots, and summary stats:
 
-- [ ] **Parameter panel** — use `mo.ui` controls for:
-  - Storage capacity, min SoC, max charge/discharge rate, efficiencies
-  - MPC horizon length `H`
-  - Simulation seed and number of time steps
-  - Forecast noise level
-- [ ] **Simulation cell** — call `generate_price_series` and `generate_demand_series`;
-  display a price series preview plot
-- [ ] **Perfect foresight cell** — call `solve_perfect_foresight`; display result or solver error
-- [ ] **MPC cell** — call `run_mpc`; display result or solver error
-- [ ] **Visualisation cells** — see Stage 6 below
-- [ ] **Summary stats cell** — compute and display a `mo.stat` or table showing:
-  - Total cost / revenue for each strategy
-  - Number of MPC windows that were infeasible
-  - Average SoC utilisation
+- [x] `notebooks/simulation.py` — price and demand time series, forecast visualisation,
+  regenerate buttons, forecast horizon range slider
+- [x] `notebooks/lp.py` — perfect foresight LP demo with full parameter panel
+  (storage, HP), dispatch/SoC/cumulative-cost charts, summary stats
+- [x] `notebooks/mpc.py` — MPC vs perfect foresight comparison with horizon slider,
+  stacked dispatch charts, SoC comparison, cumulative cost, summary stats including
+  "cost of price uncertainty"
+- [x] Solver errors surfaced via `mo.callout` / `mo.stop` in both `lp.py` and `mpc.py`
+
+Note: a "forecast noise level" slider was not added to `mpc.py`; the forecast horizon
+sliders in `simulation.py` serve a similar exploratory purpose.
 
 ---
 
 ## Stage 6: Plotly Visualisations
 
-Implement a module `src/plots.py` with functions that return `plotly.graph_objects.Figure` objects.
+All visualisations were implemented inline within the notebooks rather than as a
+separate `src/plots.py` module. This avoided an extra layer of abstraction for a demo
+project. The following charts are present across the notebooks:
 
-- [ ] `plot_price_series(true_prices, forecast_prices) -> Figure`:
-  - True prices as a solid line
-  - Forecast as a dashed line with a shaded uncertainty band (±1 std, estimated from
-    noise params)
-- [ ] `plot_soc_comparison(soc_pf, soc_mpc, time_index) -> Figure`:
-  - Two SoC traces on the same axes (perfect foresight vs MPC)
-  - Shaded band between `s_min` and `s_max` to show feasible region
-- [ ] `plot_dispatch_comparison(charge_pf, discharge_pf, charge_mpc, discharge_mpc, prices, time_index) -> Figure`:
-  - Grouped bar chart of charge/discharge for each strategy
-  - Price overlaid as a secondary y-axis line
-- [ ] `plot_cost_breakdown(cost_pf, cost_mpc) -> Figure`:
-  - Cumulative cost over time for each strategy
-  - Final bar comparing total cost/revenue
-- [ ] All figures should use a consistent colour scheme and be sized appropriately for
-  embedding in a marimo notebook (set `height` explicitly)
+- [x] Price series with seasonal average, raw forecast, and blended forecast (`simulation.py`)
+- [x] Heat demand with seasonal baseline (`simulation.py`)
+- [x] Dispatch schedule (charge/discharge bars + price overlay) (`lp.py`, `mpc.py`)
+- [x] State of charge over time (`lp.py`, `mpc.py`)
+- [x] Cumulative electricity cost vs baseline (`lp.py`, `mpc.py`)
+- [x] PF vs MPC SoC comparison on shared axes (`mpc.py`)
+- [x] Consistent colour scheme and explicit `height` on all figures
+
+Note: `src/plots.py` was not created; a shaded s_min/s_max feasibility band and a
+final summary bar chart were not implemented.
 
 ---
 
@@ -180,25 +175,3 @@ Implement a module `src/plots.py` with functions that return `plotly.graph_objec
   - Ideas for extending the demo (stochastic MPC, battery degradation, multi-asset)
 - [ ] Verify the notebook runs cleanly end-to-end with `uv run marimo run notebook.py`
 - [ ] Optional: export a static HTML snapshot with `uv run marimo export html notebook.py`
-
----
-
-## File Structure (target)
-
-```
-mpc-storage-demo/
-├── pyproject.toml
-├── README.md
-├── NOTES.md
-├── PLAN.md
-├── notebook.py
-├── src/
-│   ├── __init__.py
-│   ├── simulation.py
-│   ├── storage_lp.py
-│   ├── mpc.py
-│   └── plots.py
-└── tests/
-    ├── test_lp.py
-    └── test_simulation.py
-```
