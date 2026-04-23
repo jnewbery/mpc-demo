@@ -151,16 +151,24 @@ final summary bar chart were not implemented.
 
 ## Stage 7: Testing and Validation
 
-- [ ] Add a `tests/` directory
-- [ ] Write `tests/test_lp.py`:
-  - Test that the perfect foresight solution is always at least as good as MPC (by cost)
-  - Test SoC constraint satisfaction for both solvers
-  - Test that the solver returns a valid result for a trivial 2-step case with known
-    optimal solution
-- [ ] Write `tests/test_simulation.py`:
-  - Test that generated prices are within a plausible range
-  - Test that the forecast converges to the true price when noise sigma is 0
-- [ ] Run tests with `uv run pytest`
+- [x] Add a `tests/` directory
+- [x] `tests/test_lp.py` (13 tests):
+  - PF cost ≤ MPC cost (PF is the information-optimal upper bound)
+  - PF and MPC SoC, charge, discharge, and HP output all within bounds
+  - `solve_single_window` over the full horizon matches `solve_perfect_foresight` cost
+  - 2-step known optimum: cheap day 0 → expensive day 1, asserts `hp_output` and cost
+    (not raw charge values, which are degenerate)
+  - 2-step no-benefit: expensive day 0 → cheap day 1, cost equals baseline
+  - MPC H=1 (myopic) completes with zero fallbacks
+- [x] `tests/test_simulation.py` (11 tests):
+  - Prices and demand are non-negative and within plausible ranges
+  - Correct array shape for varying T
+  - Seasonal winter peak for both price and demand
+  - Weekend demand dip
+  - Forecast equals true price when `forecast_short_term` covers the full window
+  - Forecast equals seasonal average when `forecast_long_term = 1`
+  - Different seeds give different series; same seed gives identical series
+- [x] All 24 tests pass: `uv run pytest tests/ -v`
 
 ---
 

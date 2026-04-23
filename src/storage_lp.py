@@ -58,7 +58,10 @@ def _build_lp(
 
     u_plus = cp.Variable(H, nonneg=True, name="u_plus")
     u_minus = cp.Variable(H, nonneg=True, name="u_minus")
-    s = cp.Variable(H, nonneg=True, name="s")
+    # H+1 SoC states: s[0] = initial, s[H] = final after all H steps.
+    # This ensures every discharge is bounded by available storage, including
+    # the last timestep (which a T-variable formulation leaves unconstrained).
+    s = cp.Variable(H + 1, nonneg=True, name="s")
 
     # hp_output[t] = demand[t] + u_plus[t] - u_minus[t]
     hp_output = demand + u_plus - u_minus
@@ -69,9 +72,9 @@ def _build_lp(
     constraints = [
         # Initial SoC
         s[0] == s0,
-        # SoC dynamics: efficiency applied on discharge
-        s[1:] == s[:-1] + u_plus[:-1] - u_minus[:-1] / params.eta,
-        # SoC bounds
+        # SoC dynamics for all H steps (always H constraints, never empty)
+        s[1:] == s[:-1] + u_plus - u_minus / params.eta,
+        # SoC bounds on all H+1 states
         s >= params.s_min,
         s <= params.s_max,
         # Charge / discharge bounds
@@ -102,7 +105,7 @@ def solve_perfect_foresight(
     Returns
     -------
     dict with keys:
-        soc        : np.ndarray(T) — state of charge each day (MWh)
+        soc        : np.ndarray(T) — state of charge at the start of each day (MWh)
         charge     : np.ndarray(T) — heat charged into storage (MWh/day)
         discharge  : np.ndarray(T) — heat discharged from storage (MWh/day)
         hp_output  : np.ndarray(T) — heat pump thermal output (MWh/day)
@@ -124,7 +127,8 @@ def solve_perfect_foresight(
 
     u_plus = np.maximum(0.0, np.array(model_vars["u_plus"].value))
     u_minus = np.maximum(0.0, np.array(model_vars["u_minus"].value))
-    s = np.maximum(0.0, np.array(model_vars["s"].value))
+    # s has H+1 elements; return the H start-of-day SoCs (drop the terminal state)
+    s = np.maximum(0.0, np.array(model_vars["s"].value)[:-1])
     hp_output = np.maximum(0.0, demand + u_plus - u_minus)
     cost = float(np.dot(prices, hp_output) / storage_params.cop)
 
@@ -175,7 +179,7 @@ def solve_single_window(
 
     u_plus = np.maximum(0.0, np.array(model_vars["u_plus"].value))
     u_minus = np.maximum(0.0, np.array(model_vars["u_minus"].value))
-    s = np.maximum(0.0, np.array(model_vars["s"].value))
+    s = np.maximum(0.0, np.array(model_vars["s"].value)[:-1])
     hp_output = np.maximum(0.0, demand_forecast + u_plus - u_minus)
     cost = float(np.dot(prices_forecast, hp_output) / storage_params.cop)
 
