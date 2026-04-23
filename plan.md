@@ -87,22 +87,27 @@ heat source; its output must satisfy the demand balance at every time step:
 
 ## Stage 4: MPC Loop
 
-Implement `src/mpc.py` containing the rolling-horizon controller.
+Implemented in `src/mpc.py` and `notebooks/mpc.py`.
 
-- [ ] Define an `MPCParams` dataclass holding:
-  - Horizon length `H` (number of steps to optimise over)
-  - Whether to use a noisy forecast or true prices within the window
-- [ ] Implement `run_mpc(true_prices, storage_params, mpc_params, sim_params) -> dict`:
+Demand within the window uses true values. The horizon shrinks at the end of the
+year so the window never extends beyond the simulation.
+
+- [x] Define `MPCParams(H: int = 30)` — horizon length is the only MPC-specific parameter
+- [x] Implement `run_mpc(true_prices, true_demand, storage_params, mpc_params, sim_params) -> dict`:
   - At each time step `t`:
-    1. Generate a forecast for `prices[t : t+H]` using `generate_price_forecast`
-    2. Solve the LP over the horizon using `solve_single_window`
-    3. Apply only `u_plus[0]`, `u_minus[0]` from the solution
-    4. Advance the true SoC using the true efficiency equations
-    5. Record the applied action and resulting SoC
-  - Return a dict with keys: `soc`, `charge`, `discharge`, `cost` (computed using
-    true prices, not forecast prices)
-- [ ] Include a fallback if the solver returns infeasible for a given window (e.g. hold,
-  or apply zero charge/discharge)
+    1. Compute `H_window = min(H, T - t)` to handle end-of-year boundary
+    2. Generate a price forecast via `get_forecast_window(t, H_window, true_prices, sim_params)`
+    3. Solve LP with `solve_single_window(price_fc, demand_fc, s, storage_params)`
+    4. Apply `charge[0]`, `discharge[0]` from the solution
+    5. Advance true SoC: `s = s + u_plus - u_minus / eta`, clipped to `[s_min, s_max]`
+    6. Record true cost: `prices[t] * hp_output[t] / cop`
+  - Returns dict with keys: `soc`, `charge`, `discharge`, `hp_output`, `cost`, `n_fallbacks`
+- [x] Fallback on solver failure: hold (zero charge/discharge)
+- [x] Verified via `python -m src.mpc`: MPC saves 3.1% vs baseline, PF saves 3.5%;
+  MPC cost ≥ PF cost; all constraints satisfied
+- [x] Created `notebooks/mpc.py` with parameter panel (storage + HP + horizon slider),
+  stacked dispatch charts with secondary price axis, SoC comparison, cumulative cost,
+  and summary stats including "cost of price uncertainty" (MPC − PF gap)
 
 ---
 
