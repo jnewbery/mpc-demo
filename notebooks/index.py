@@ -50,11 +50,13 @@ def show_index(ast, mo, pathlib):
 
         rows.append((f"[{human_name}]({url})", description or ""))
 
+    rows.sort(key=lambda x: x[0])  # Sort by title
+
     # 4. Display the dashboard
     table_rows = "\n".join(f"| {title} | {description} |" for title, description in rows)
     table = "\n".join(
         [
-            "| Report | Description |",
+            "| Demo | Description |",
             "|:--- |:--- |",
             table_rows,
         ]
