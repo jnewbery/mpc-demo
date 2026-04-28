@@ -8,3 +8,4 @@ This repository contains [Marimo](https://marimo.io/) notebooks.
 - Use marimo UI elements (`mo.ui.*`) for parameters instead of ad-hoc input parsing; bind values once and reuse.
 - Keep state explicit: avoid hidden globals or implicit mutation across cells; prefer returning values from functions or clear, named variables.
 - If a cell is expensive, add a small guard or parameter to control recomputation.
+- Do not use pandas as a dependency. Use polars instead.
