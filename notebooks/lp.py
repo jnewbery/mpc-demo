@@ -1,5 +1,5 @@
 """
-Title: 3. LP model
+Title: 4. LP model
 Description: A perfect foresight benchmark for the thermal energy storage problem, solved with a Linear Programme (LP)
 """
 
