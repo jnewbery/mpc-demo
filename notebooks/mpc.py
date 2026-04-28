@@ -1,5 +1,5 @@
 """
-Title: 3. MPC controller
+Title: 4. MPC controller
 Description: A rolling-horizon Model Predictive Control (MPC) strategy for the thermal energy storage problem.
 """
 

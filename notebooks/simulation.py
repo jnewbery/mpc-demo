@@ -1,5 +1,5 @@
 """
-Title: 1. Simulation
+Title: 2. Simulation
 Description: A simple generative model of daily energy prices and heat demand, with a forecast.
 """
 

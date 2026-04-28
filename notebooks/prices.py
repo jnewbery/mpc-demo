@@ -1,5 +1,5 @@
 """
-Title: 0. Day-ahead prices
+Title: 1. Day-ahead prices
 Description: Germany/Luxembourg day-ahead electricity prices (2019–2025) with year selector
 """
 
