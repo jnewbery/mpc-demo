@@ -253,3 +253,181 @@ def _(datetime, go, mo, seasonal_temp):
         height=300,
     )
     mo.ui.plotly(_fig3)
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## AR(1) parameter estimation
+
+    After removing the seasonal trend, the residuals $r_t = T_t - \hat{T}(d_t)$ are
+    modelled as an **AR(1)** autoregressive process:
+
+    $$r_t = \varphi \, r_{t-1} + \varepsilon_t, \qquad \varepsilon_t \sim \mathcal{N}(0, \sigma^2)$$
+
+    $\varphi$ is estimated by ordinary least squares on consecutive within-year
+    residual pairs (year boundaries are never crossed).  $\sigma$ is the standard
+    deviation of the one-step innovations $\varepsilon_t = r_t - \hat\varphi r_{t-1}$.
+
+    The stationary standard deviation $\sigma_\text{stat} = \sigma / \sqrt{1 - \varphi^2}$
+    gives the long-run spread of temperatures around the seasonal mean.
+    """)
+    return
+
+
+@app.cell
+def _(df_temp, np, pl, seasonal_temp, temp_regression_years):
+    _included = temp_regression_years.value
+    _year_residuals_temp = []
+
+    for _year in _included:
+        _ydf = (
+            df_temp.filter(pl.col("year") == _year)
+            .sort("day_of_year")
+            .filter(pl.col("tmk").is_not_null())
+        )
+        _doys = np.clip(_ydf.get_column("day_of_year").to_numpy() - 1, 0, 364)
+        _resid = _ydf.get_column("tmk").to_numpy() - seasonal_temp[_doys]
+        _year_residuals_temp.append(_resid)
+
+    _r0 = np.concatenate([r[:-1] for r in _year_residuals_temp])
+    _r1 = np.concatenate([r[1:] for r in _year_residuals_temp])
+
+    phi_temp = float(np.dot(_r0, _r1) / np.dot(_r0, _r0))
+    sigma_temp = float(np.std(_r1 - phi_temp * _r0, ddof=1))
+    sigma_stat_temp = float(np.std(np.concatenate(_year_residuals_temp), ddof=1))
+    n_years_temp = len(_included)
+    n_obs_temp = sum(len(r) for r in _year_residuals_temp)
+    return n_obs_temp, n_years_temp, phi_temp, sigma_stat_temp, sigma_temp
+
+
+@app.cell
+def _(mo, n_obs_temp, n_years_temp, phi_temp, sigma_stat_temp, sigma_temp):
+    mo.vstack([
+        mo.md(
+            f"Estimated from **{n_years_temp} years** of detrended daily temperatures "
+            f"({n_obs_temp} observations)."
+        ),
+        mo.hstack([
+            mo.stat(f"{phi_temp:.3f}", label="φ  (AR(1) autocorrelation)"),
+            mo.stat(f"{sigma_temp:.2f} °C", label="σ  (innovation std dev)"),
+            mo.stat(f"{sigma_stat_temp:.2f} °C", label="σ_stationary  (residual std dev)"),
+        ]),
+    ])
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## Nominal temperature year
+
+    The seasonal curve and AR(1) parameters estimated above define a generative model
+    for a typical temperature year.  A scenario is drawn by:
+
+    1. Sampling the initial residual from the stationary distribution:
+       $r_0 \sim \mathcal{N}\!\left(0,\, \sigma^2/(1-\varphi^2)\right)$
+    2. Iterating the AR(1) for 365 days:
+       $r_t = \varphi \, r_{t-1} + \varepsilon_t$
+    3. Adding the seasonal mean:
+       $T_t = \hat{T}(t) + r_t$
+
+    The shaded region shows ±1σ and ±2σ around the seasonal mean (darker = higher
+    probability density).  Press **Generate new year** to draw a new scenario.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    generate_temp_btn = mo.ui.run_button(label="Generate new year")
+    return (generate_temp_btn,)
+
+
+@app.cell
+def _(datetime, generate_temp_btn, go, mo, np, phi_temp, seasonal_temp, sigma_stat_temp, sigma_temp):
+    _tick_months = [datetime.date(2001, m, 1) for m in range(1, 13)]
+    _tick_doys = [d.timetuple().tm_yday for d in _tick_months]
+    _tick_labels = [d.strftime("%b") for d in _tick_months]
+
+    _x = list(range(1, 366))
+    _s = sigma_stat_temp
+    _colour = "214,39,40"  # red in RGB
+
+    _N = 30
+    _step = 2 * _s / _N
+    _max_alpha = 0.55
+
+    _fig4 = go.Figure()
+
+    for _i in range(_N, 0, -1):
+        _alpha = (_N - _i + 1) / _N * _max_alpha
+        _outer = _i * _step
+        _inner = (_i - 1) * _step
+        _fig4.add_trace(go.Scatter(
+            x=_x + _x[::-1],
+            y=(seasonal_temp + _outer).tolist() + (seasonal_temp + _inner).tolist()[::-1],
+            fill="toself", fillcolor=f"rgba({_colour},{_alpha:.3f})",
+            line=dict(width=0), showlegend=False, hoverinfo="skip",
+        ))
+        _fig4.add_trace(go.Scatter(
+            x=_x + _x[::-1],
+            y=(seasonal_temp - _inner).tolist() + (seasonal_temp - _outer).tolist()[::-1],
+            fill="toself", fillcolor=f"rgba({_colour},{_alpha:.3f})",
+            line=dict(width=0), showlegend=False, hoverinfo="skip",
+        ))
+
+    for _n, _label in [(1, "±1σ"), (2, "±2σ")]:
+        for _sign, _show in [(1, True), (-1, False)]:
+            _fig4.add_trace(go.Scatter(
+                x=_x, y=(seasonal_temp + _sign * _n * _s).tolist(),
+                mode="lines",
+                line=dict(color=f"rgba({_colour},0.7)", width=1, dash="dash"),
+                name=_label, showlegend=_show,
+                hovertemplate=f"{_label} %{{y:.1f}} °C<extra></extra>",
+            ))
+
+    _fig4.add_trace(go.Scatter(
+        x=_x, y=seasonal_temp.tolist(),
+        mode="lines", line=dict(color=f"rgb({_colour})", width=2.5),
+        name="Seasonal mean",
+        hovertemplate="Day %{x}<br>%{y:.1f} °C<extra></extra>",
+    ))
+
+    _rng = np.random.default_rng()
+    _r = np.empty(365)
+    _r[0] = _rng.normal(0, sigma_stat_temp)
+    for _t in range(1, 365):
+        _r[_t] = phi_temp * _r[_t - 1] + _rng.normal(0, sigma_temp)
+    _sim_temp = (seasonal_temp + _r).tolist()
+
+    _fig4.add_trace(go.Scatter(
+        x=_x, y=_sim_temp,
+        mode="lines", line=dict(color="rgba(50,50,50,0.7)", width=1.5),
+        name="Simulated year",
+        hovertemplate="Day %{x}<br>%{y:.1f} °C<extra></extra>",
+    ))
+
+    _fig4.add_hline(y=0, line=dict(color="rgba(0,0,0,0.2)", width=1, dash="dot"))
+
+    _fig4.update_layout(
+        title="Average seasonal temperature with uncertainty bands",
+        xaxis=dict(
+            title="",
+            tickvals=_tick_doys, ticktext=_tick_labels,
+            showgrid=True, gridcolor="#e5e5e5",
+        ),
+        yaxis=dict(
+            title="°C",
+            showgrid=True, gridcolor="#e5e5e5",
+            range=[
+                float(np.min(seasonal_temp - 2 * _s)) - 3,
+                float(np.max(seasonal_temp + 2 * _s)) + 3,
+            ],
+        ),
+        plot_bgcolor="white",
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(t=60, b=40, l=60, r=20),
+        height=400,
+    )
+    mo.vstack([generate_temp_btn, mo.ui.plotly(_fig4)])
