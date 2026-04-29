@@ -64,9 +64,7 @@ def show_index(ast, mo, pathlib):
     mo.vstack([
         mo.md(
         """
-        # 🔥 Thermal Energy Storage demos 🔥
-        Select a notebook below to run the demo.
-
+        # 🔥 Thermal Energy Storage notebooks 🔥
         ---
         """),
         mo.md(table)
