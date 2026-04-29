@@ -15,6 +15,7 @@ dependencies = [
 [tool.poe.tasks]
 edit = "marimo edit notebooks"
 run = "server.py"
+deploy = "scripts/deploy.sh"
 
 [dependency-groups]
 dev = [
