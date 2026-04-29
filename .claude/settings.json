@@ -1,9 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(uvx marimo check *)",
+      "Bash(chmod +x *)",
+      "Bash(uv run python -m src/*)",
       "Bash(uv run python src/*)",
-      "Bash(uv run python -m src/*)"
+      "Bash(uvx marimo check *)"
     ]
   }
 }
