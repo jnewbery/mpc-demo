@@ -430,9 +430,10 @@ def _(datetime, generate_temp_btn, go, mo, np, seasonal_temp, sigma_stat_temp, s
 def _(goerlitz_dh_demand_mwh, np, seasonal_temp):
     _T_BASE = 20.0
     _T_LIMIT = 15.0
-    _dd_factors = np.where(seasonal_temp < _T_LIMIT, _T_BASE - seasonal_temp + 4.0, 4.0)
-    k_goerlitz = (goerlitz_dh_demand_mwh * 1_000.0) / float(_dd_factors.sum())
-    return (k_goerlitz,)
+    p_base_goerlitz = 0.2 * goerlitz_dh_demand_mwh / 365  # MWh/day: hot water = 20% of annual demand
+    _hdd = float(np.where(seasonal_temp < _T_LIMIT, _T_BASE - seasonal_temp, 0.0).sum())
+    k_goerlitz = 0.8 * goerlitz_dh_demand_mwh / _hdd
+    return k_goerlitz, p_base_goerlitz
 
 
 @app.cell
@@ -456,45 +457,37 @@ def _(mo):
     |-----------|-------|---------|
     | $T_{\text{base}}$ | 20 °C | Indoor target temperature |
     | $T_{\text{limit}}$ | 15 °C | Heating cut-off (no space heating above this) |
-    | $k$ | adjustable (kW/K) | Aggregate fabric heat-loss coefficient |
-    | $P_{\text{base}} = 4\,k$ | kWh/day | Baseload (hot water, always-on) |
+    | $P_{\text{base}}$ | MWh/day | Baseload (hot water, always-on) |
+    | $k$ | MW/K | Aggregate fabric heat-loss coefficient |
 
-    The slider below is calibrated to the Görlitz district heating network:
-    annual DH demand from the Saxony heatgrid dataset
-    ([RWTH-EBC](https://data.mendeley.com/datasets/k3ry9p944k)) is used to back-calculate
-    $k$ from the seasonal temperature curve.
+    Both $P_{\text{base}}$ and $k$ parameters are derived from the Görlitz annual DH demand (Saxony heatgrid dataset,
+    [RWTH-EBC](https://data.mendeley.com/datasets/k3ry9p944k)):
+    - $P_{\text{base}}$ is set to
+    20 % of annual demand spread evenly over 365 days
+    - $k$ is back-calculated from the
+    remaining 80 % (space heating) and the seasonal temperature curve.
     """)
     return
 
 
 @app.cell
-def _(goerlitz_dh_demand_mwh, k_goerlitz, mo):
+def _(goerlitz_dh_demand_mwh, k_goerlitz, mo, p_base_goerlitz):
     mo.hstack([
         mo.stat(f"{goerlitz_dh_demand_mwh:,.0f} MWh/yr", label="Görlitz DH demand"),
-        mo.stat(f"{k_goerlitz:,.0f} kW/K", label="Calibrated k"),
+        mo.stat(f"{k_goerlitz:.2f} MW/K", label="Calibrated k"),
+        mo.stat(f"{p_base_goerlitz:.1f} MWh/day", label="Baseload P_base"),
     ])
 
 
 @app.cell
-def _(k_goerlitz, mo):
-    heat_k = mo.ui.slider(
-        start=100, stop=50_000, step=100, value=round(k_goerlitz / 100) * 100,
-        label="Thermal loss coefficient  k  (kW/K)",
-        show_value=True,
-    )
-    return (heat_k,)
-
-
-@app.cell
-def _(datetime, go, heat_k, mo, sim_temp):
+def _(datetime, go, k_goerlitz, mo, p_base_goerlitz, sim_temp):
     _T_BASE = 20
     _T_LIMIT = 15
-    _k = heat_k.value
-    _P_BASE = _k * 4
+    _P_BASE = p_base_goerlitz
 
     _x = list(range(1, 366))
     _q = [
-        _k * (_T_BASE - t) + _P_BASE if t < _T_LIMIT else _P_BASE
+        k_goerlitz * (_T_BASE - t) + _P_BASE if t < _T_LIMIT else _P_BASE
         for t in sim_temp
     ]
 
@@ -508,24 +501,24 @@ def _(datetime, go, heat_k, mo, sim_temp):
         mode="lines",
         line=dict(color="rgba(214,39,40,0.8)", width=1.5),
         name="Heat demand",
-        hovertemplate="Day %{x}<br>%{y:.0f} kWh/day<extra></extra>",
+        hovertemplate="Day %{x}<br>%{y:.1f} MWh<extra></extra>",
     ))
 
     _fig_demand.update_layout(
-        title=f"Nominal year heat demand  (k = {_k} kW/K)",
+        title="Görlitz DHN — nominal year heat demand",
         xaxis=dict(
             title="",
             tickvals=_tick_doys, ticktext=_tick_labels,
             showgrid=True, gridcolor="#e5e5e5",
         ),
-        yaxis=dict(title="kWh/day", showgrid=True, gridcolor="#e5e5e5", rangemode="tozero"),
+        yaxis=dict(title="MWh", showgrid=True, gridcolor="#e5e5e5", rangemode="tozero"),
         plot_bgcolor="white",
         hovermode="x unified",
         margin=dict(t=60, b=40, l=60, r=20),
         height=400,
     )
 
-    mo.vstack([heat_k, mo.ui.plotly(_fig_demand)])
+    mo.ui.plotly(_fig_demand)
 
 
 if __name__ == "__main__":
