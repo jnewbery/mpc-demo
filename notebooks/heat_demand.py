@@ -1,6 +1,6 @@
 """
-Title: Temperature
-Description: Daily mean temperatures at Görlitz (DWD station 01684), 2015–2024
+Title: Heat Demand
+Description: Görlitz DHN heat demand model: temperature data, seasonal fit, AR(1) residuals, and degree-day calibration
 """
 
 import marimo

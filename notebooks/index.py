@@ -17,7 +17,7 @@ def show_index(ast, mo, pathlib):
     NOTEBOOK_ORDER = [
         "dhn.py",
         "prices.py",
-        "temperature.py",
+        "heat_demand.py",
         "simulation.py",
         "lp.py",
         "mpc.py",
