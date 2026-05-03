@@ -55,3 +55,30 @@ The column used in this project is `TMK`. Other available columns:
 | `TNK` | Daily minimum temperature at 2 m | °C |
 | `TGK` | Daily minimum temperature at ground level (5 cm) | °C |
 | `eor` | End-of-record marker | — |
+
+---
+
+## dhn/heatgrids_Sachsen.geojson and dhn/heatgrids_Sachsen.csv
+
+Presumed district heating network (DHN) areas in Saxony (Sachsen), Germany, derived from building heat demand data.
+
+**Source:** RWTH-EBC AixDHN — [github.com/RWTH-EBC/AixDHN](https://github.com/RWTH-EBC/AixDHN)
+
+**Coverage:** 434 network polygons across 251 municipalities in Saxony
+
+**Format:** The GeoJSON file contains polygon geometries (EPSG:3035) plus attributes. The CSV is a geometry-free extract with the scalar attributes only (dropping `geometry`, `centroid`, and `DH_cells`).
+
+| Column | Description | Unit |
+|--------|-------------|------|
+| `ID` | Unique network identifier | — |
+| `GEN` | Municipality name | — |
+| `ARS` | Regional administrative key | — |
+| `LAN` | State (always `Sachsen`) | — |
+| `area` | Area of presumed DHN polygon | km² |
+| `DH_demand` | Annual district heating demand (private households) | MWh/year |
+| `total_demand_cells` | Total annual heat demand of households in DH cells | MWh/year |
+| `total_demand_area` | Total annual heat demand in DHN area | MWh/year |
+| `share_DH` | Share of DH demand within the DHN area | % |
+| `heat_density_DH` | `DH_demand` divided by `area` | GWh/year/km² |
+| `heat_density` | `total_demand_area` divided by `area` | GWh/year/km² |
+| `DH_supplied_households` | Number of households supplied by the DHN | — |
