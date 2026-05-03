@@ -11,29 +11,16 @@ app = marimo.App(width="full")
 
 @app.cell
 def _():
+    import datetime
+    import pathlib
     import marimo as mo
     import numpy as np
+    import polars as pl
     import plotly.graph_objects as go
-    import sys
-    sys.path.insert(0, ".")
 
-    from src.simulation import (
-        SimulationParams,
-        generate_price_series,
-        generate_demand_series,
-    )
     from src.storage_lp import StorageParams, solve_perfect_foresight
 
-    return (
-        SimulationParams,
-        StorageParams,
-        generate_demand_series,
-        generate_price_series,
-        go,
-        mo,
-        np,
-        solve_perfect_foresight,
-    )
+    return StorageParams, datetime, go, mo, np, pathlib, pl, solve_perfect_foresight
 
 
 @app.cell
@@ -54,7 +41,7 @@ def _(mo):
     | Symbol | Unit | Meaning |
     |--------|------|---------|
     | $t$ | day | Time index, $t = 0, \ldots, T-1$ |
-    | $p_t$ | £/MWh | Spot electricity price on day $t$ |
+    | $p_t$ | €/MWh | Spot electricity price on day $t$ |
     | $D_t$ | MWh/day | Heat demand on day $t$ |
     | $\text{hp}_t$ | MWh/day | Heat pump thermal output on day $t$ |
     | $u^+_t$ | MWh/day | Heat charged into storage on day $t$ |
@@ -138,49 +125,66 @@ def _(mo):
 
 
 @app.cell
+def _(mo, pathlib):
+    _price_dir = pathlib.Path(__file__).parent.parent / "data" / "price_scenarios"
+    _heat_dir = pathlib.Path(__file__).parent.parent / "data" / "heat_demand_scenarios"
+
+    _price_files = sorted(_price_dir.glob("*.csv"))
+    _heat_files = sorted(_heat_dir.glob("*.csv"))
+
+    price_scenario_selector = mo.ui.dropdown(
+        options={f.stem.replace("_", " ").title(): str(f) for f in _price_files},
+        value=_price_files[0].stem.replace("_", " ").title() if _price_files else None,
+        label="Price scenario",
+    )
+    heat_scenario_selector = mo.ui.dropdown(
+        options={f.stem.replace("_", " ").title(): str(f) for f in _heat_files},
+        value=_heat_files[0].stem.replace("_", " ").title() if _heat_files else None,
+        label="Heat demand scenario",
+    )
+    mo.hstack([price_scenario_selector, heat_scenario_selector], justify="start")
+    return heat_scenario_selector, price_scenario_selector
+
+
+@app.cell
 def _(mo):
-    sim_seed = mo.ui.number(start=0, stop=99999, step=1, value=42, label="Seed")
-    s_max = mo.ui.number(start=10, stop=10000, step=10, value=100, label="Storage capacity (MWh)")
-    s_min = mo.ui.number(start=0, stop=50, step=5, value=0, label="Min SoC (MWh)")
-    s0 = mo.ui.number(start=0, stop=200, step=5, value=50, label="Initial SoC (MWh)")
-    u_plus_max = mo.ui.number(start=5, stop=10000, step=5, value=50, label="Max charge rate (MWh/day)")
-    u_minus_max = mo.ui.number(start=5, stop=10000, step=5, value=50, label="Max discharge rate (MWh/day)")
+    s_max = mo.ui.number(start=10, stop=10_000, step=10, value=500, label="Storage capacity (MWh)")
+    s_min = mo.ui.number(start=0, stop=500, step=10, value=0, label="Min SoC (MWh)")
+    s0 = mo.ui.number(start=0, stop=10_000, step=10, value=250, label="Initial SoC (MWh)")
+    u_plus_max = mo.ui.number(start=5, stop=10_000, step=5, value=300, label="Max charge rate (MWh/day)")
+    u_minus_max = mo.ui.number(start=5, stop=10_000, step=5, value=300, label="Max discharge rate (MWh/day)")
     eta = mo.ui.slider(start=0.5, stop=1.0, step=0.05, value=0.9, label="Discharge efficiency η", show_value=True)
     cop = mo.ui.slider(start=1.0, stop=5.0, step=0.25, value=3.0, label="Heat pump COP", show_value=True)
-    h_max = mo.ui.number(start=10, stop=300, step=10, value=100, label="Max HP output (MWh/day)")
+    h_max = mo.ui.number(start=10, stop=10_000, step=10, value=600, label="Max HP output (MWh/day)")
 
     mo.vstack([
-        mo.md("### Simulation"),
-        mo.hstack([sim_seed], justify="start"),
         mo.md("### Storage"),
         mo.hstack([s_max, s_min, s0, u_plus_max, u_minus_max], justify="start"),
         mo.md("### Heat pump"),
         mo.hstack([eta, cop, h_max], justify="start"),
     ])
-    return cop, eta, h_max, s0, s_max, s_min, sim_seed, u_minus_max, u_plus_max
+    return cop, eta, h_max, s0, s_max, s_min, u_minus_max, u_plus_max
 
 
 @app.cell
 def _(
-    SimulationParams,
     StorageParams,
     cop,
     eta,
-    generate_demand_series,
-    generate_price_series,
     h_max,
+    heat_scenario_selector,
     mo,
+    pl,
+    price_scenario_selector,
     s0,
     s_max,
     s_min,
-    sim_seed,
     solve_perfect_foresight,
     u_minus_max,
     u_plus_max,
 ):
-    _sim = SimulationParams(seed=sim_seed.value)
-    prices = generate_price_series(_sim)
-    demand = generate_demand_series(_sim)
+    prices = pl.read_csv(price_scenario_selector.value).get_column("price").to_numpy()
+    demand = pl.read_csv(heat_scenario_selector.value).get_column("heat_demand").to_numpy()
 
     _sp = StorageParams(
         s_max=s_max.value,
@@ -208,60 +212,74 @@ def _(
 
 
 @app.cell
-def _(cop_value, demand, go, mo, np, prices, result):
+def _(cop_value, datetime, demand, go, mo, np, prices, result):
+    _tick_months = [datetime.date(2001, m, 1) for m in range(1, 13)]
+    _tick_doys = [d.timetuple().tm_yday for d in _tick_months]
+    _tick_labels = [d.strftime("%b") for d in _tick_months]
+
     _days = np.arange(1, len(prices) + 1)
 
     # --- Price + dispatch chart ---
     _fig1 = go.Figure()
-
     _fig1.add_trace(go.Bar(
-        x=_days,
-        y=result["charge"],
-        name="Charge",
-        marker_color="#4a90d9",
-        opacity=0.7,
+        x=_days, y=result["charge"],
+        name="Charge", marker_color="#4a90d9", opacity=0.7,
     ))
     _fig1.add_trace(go.Bar(
-        x=_days,
-        y=-result["discharge"],
-        name="Discharge",
-        marker_color="#e07b39",
-        opacity=0.7,
+        x=_days, y=-result["discharge"],
+        name="Discharge", marker_color="#e07b39", opacity=0.7,
     ))
     _fig1.add_trace(go.Scatter(
-        x=_days,
-        y=prices,
-        name="Price",
-        mode="lines",
+        x=_days, y=prices,
+        name="Price", mode="lines",
         line=dict(color="black", width=1.5),
         yaxis="y2",
+        hovertemplate="Day %{x}<br>%{y:.1f} €/MWh<extra></extra>",
     ))
     _fig1.update_layout(
         title="Dispatch Schedule",
-        xaxis_title="Day of year",
+        xaxis=dict(tickvals=_tick_doys, ticktext=_tick_labels, showgrid=True, gridcolor="#e5e5e5"),
         yaxis=dict(title="MWh/day", zeroline=True),
-        yaxis2=dict(title="£/MWh", overlaying="y", side="right", showgrid=False),
+        yaxis2=dict(title="€/MWh", overlaying="y", side="right", showgrid=False),
         barmode="relative",
+        plot_bgcolor="white",
         height=350,
         margin=dict(t=50, b=40, l=60, r=60),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
     )
 
+    # --- Heat demand chart ---
+    _fig_demand = go.Figure()
+    _fig_demand.add_trace(go.Scatter(
+        x=_days, y=demand,
+        name="Heat demand", mode="lines",
+        line=dict(color="#d62728", width=1.5),
+        fill="tozeroy", fillcolor="rgba(214,39,40,0.1)",
+        hovertemplate="Day %{x}<br>%{y:.1f} MWh/day<extra></extra>",
+    ))
+    _fig_demand.update_layout(
+        title="Heat Demand",
+        xaxis=dict(tickvals=_tick_doys, ticktext=_tick_labels, showgrid=True, gridcolor="#e5e5e5"),
+        yaxis=dict(title="MWh/day", showgrid=True, gridcolor="#e5e5e5"),
+        plot_bgcolor="white",
+        height=300,
+        margin=dict(t=50, b=40, l=60, r=20),
+    )
+
     # --- SoC chart ---
     _fig2 = go.Figure()
     _fig2.add_trace(go.Scatter(
-        x=_days,
-        y=result["soc"],
-        name="State of charge",
-        mode="lines",
+        x=_days, y=result["soc"],
+        name="State of charge", mode="lines",
         line=dict(color="#4a90d9", width=1.5),
-        fill="tozeroy",
-        fillcolor="rgba(74,144,217,0.15)",
+        fill="tozeroy", fillcolor="rgba(74,144,217,0.15)",
+        hovertemplate="Day %{x}<br>%{y:.1f} MWh<extra></extra>",
     ))
     _fig2.update_layout(
         title="State of Charge",
-        xaxis_title="Day of year",
-        yaxis_title="MWh",
+        xaxis=dict(tickvals=_tick_doys, ticktext=_tick_labels, showgrid=True, gridcolor="#e5e5e5"),
+        yaxis=dict(title="MWh", showgrid=True, gridcolor="#e5e5e5"),
+        plot_bgcolor="white",
         height=300,
         margin=dict(t=50, b=40, l=60, r=20),
     )
@@ -271,30 +289,28 @@ def _(cop_value, demand, go, mo, np, prices, result):
     _pf_daily = prices * result["hp_output"] / cop_value
     _fig3 = go.Figure()
     _fig3.add_trace(go.Scatter(
-        x=_days,
-        y=np.cumsum(_baseline_daily),
-        name="Baseline (no storage)",
-        mode="lines",
+        x=_days, y=np.cumsum(_baseline_daily),
+        name="Baseline (no storage)", mode="lines",
         line=dict(color="grey", width=1.5, dash="dash"),
+        hovertemplate="Day %{x}<br>%{y:,.0f} €<extra></extra>",
     ))
     _fig3.add_trace(go.Scatter(
-        x=_days,
-        y=np.cumsum(_pf_daily),
-        name="Perfect foresight",
-        mode="lines",
+        x=_days, y=np.cumsum(_pf_daily),
+        name="Perfect foresight", mode="lines",
         line=dict(color="#2a9d5c", width=1.5),
+        hovertemplate="Day %{x}<br>%{y:,.0f} €<extra></extra>",
     ))
     _fig3.update_layout(
         title="Cumulative Electricity Cost",
-        xaxis_title="Day of year",
-        yaxis_title="£",
+        xaxis=dict(tickvals=_tick_doys, ticktext=_tick_labels, showgrid=True, gridcolor="#e5e5e5"),
+        yaxis=dict(title="€", showgrid=True, gridcolor="#e5e5e5"),
+        plot_bgcolor="white",
         height=300,
         margin=dict(t=50, b=40, l=60, r=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
     )
 
-    mo.vstack([_fig1, _fig2, _fig3])
-    return
+    mo.vstack([_fig1, _fig_demand, _fig2, _fig3])
 
 
 @app.cell
@@ -304,12 +320,11 @@ def _(cop_value, demand, mo, np, prices, result):
     _pct = 100 * _saving / _baseline_cost
 
     mo.hstack([
-        mo.stat(value=f"£{_baseline_cost:,.0f}", label="Baseline cost"),
-        mo.stat(value=f"£{result['cost']:,.0f}", label="Perfect foresight cost"),
-        mo.stat(value=f"£{_saving:,.0f} ({_pct:.1f}%)", label="Saving"),
+        mo.stat(value=f"€{_baseline_cost:,.0f}", label="Baseline cost"),
+        mo.stat(value=f"€{result['cost']:,.0f}", label="Perfect foresight cost"),
+        mo.stat(value=f"€{_saving:,.0f} ({_pct:.1f}%)", label="Saving"),
         mo.stat(value=result["status"], label="Solver status"),
     ], justify="start")
-    return
 
 
 if __name__ == "__main__":

@@ -18,8 +18,8 @@ def show_index(ast, mo, pathlib):
         "dhn.py",
         "prices.py",
         "heat_demand.py",
-        "forecast.py",
         "lp.py",
+        "forecast.py",
         "mpc.py",
     ]
 
