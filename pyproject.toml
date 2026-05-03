@@ -1,7 +1,14 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
 [project]
-name = "marimo-template"
+name = "mpc-demo"
 version = "0.1.0"
-description = "Template for marimo repositories"
+description = "Demo notebooks for model predictive control (MPC)"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
