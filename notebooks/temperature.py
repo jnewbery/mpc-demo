@@ -142,16 +142,9 @@ def _(mo):
     mo.md(r"""
     ## Seasonal fit
 
-    A **Fourier regression** is fitted to the selected years to extract the average
-    seasonal temperature curve.  The model has the form
-
-    $$
-    T(d) = a_0 + \sum_{k=1}^{K} \bigl[ a_k \cos\!\tfrac{2\pi k d}{365.25} + b_k \sin\!\tfrac{2\pi k d}{365.25} \bigr]
-    $$
-
-    where $d$ is the day-of-year and $K = 3$ harmonics are used by default.
-    The regression is fitted by ordinary least squares across all selected years
-    simultaneously.  Years can be added or removed using the selector below.
+    A Fourier regression is fitted to the selected years — see the
+    [Prices](/notebooks/prices) notebook for a full description of the method.
+    $K = 3$ harmonics are used by default.
     """)
     return
 
@@ -266,17 +259,8 @@ def _(mo):
     mo.md(r"""
     ## AR(1) parameter estimation
 
-    After removing the seasonal trend, the residuals $r_t = T_t - \hat{T}(d_t)$ are
-    modelled as an **AR(1)** autoregressive process:
-
-    $$r_t = \varphi \, r_{t-1} + \varepsilon_t, \qquad \varepsilon_t \sim \mathcal{N}(0, \sigma^2)$$
-
-    $\varphi$ is estimated by ordinary least squares on consecutive within-year
-    residual pairs (year boundaries are never crossed).  $\sigma$ is the standard
-    deviation of the one-step innovations $\varepsilon_t = r_t - \hat\varphi r_{t-1}$.
-
-    The stationary standard deviation $\sigma_\text{stat} = \sigma / \sqrt{1 - \varphi^2}$
-    gives the long-run spread of temperatures around the seasonal mean.
+    The detrended residuals are modelled as an AR(1) process — see the
+    [Prices](/notebooks/prices) notebook for a full description.
     """)
     return
 
@@ -321,18 +305,10 @@ def _(mo):
     mo.md(r"""
     ## Nominal temperature year
 
-    The seasonal curve and AR(1) parameters estimated above define a generative model
-    for a typical temperature year.  A scenario is drawn by:
-
-    1. Sampling the initial residual from the stationary distribution:
-       $r_0 \sim \mathcal{N}\!\left(0,\, \sigma^2/(1-\varphi^2)\right)$
-    2. Iterating the AR(1) for 365 days:
-       $r_t = \varphi \, r_{t-1} + \varepsilon_t$
-    3. Adding the seasonal mean:
-       $T_t = \hat{T}(t) + r_t$
-
-    The shaded region shows ±1σ and ±2σ around the seasonal mean (darker = higher
-    probability density).  Press **Generate new year** to draw a new scenario.
+    The seasonal curve and AR(1) parameters define a generative model for a
+    typical temperature year — see the [Prices](/notebooks/prices) notebook for
+    a full description. The shaded bands show ±1σ and ±2σ around the seasonal mean.
+    Press **Generate new year** to draw a new scenario.
     """)
     return
 
