@@ -331,7 +331,14 @@ def _(mo):
 
 
 @app.cell
-def _(ar1_simulate, datetime, generate_temp_btn, go, mo, np, phi_temp, seasonal_temp, sigma_stat_temp, sigma_temp):
+def _(ar1_simulate, generate_temp_btn, phi_temp, seasonal_temp, sigma_temp):
+    _r = ar1_simulate(phi_temp, sigma_temp)
+    sim_temp = (seasonal_temp + _r).tolist()
+    return (sim_temp,)
+
+
+@app.cell
+def _(datetime, generate_temp_btn, go, mo, np, seasonal_temp, sigma_stat_temp, sim_temp):
     _tick_months = [datetime.date(2001, m, 1) for m in range(1, 13)]
     _tick_doys = [d.timetuple().tm_yday for d in _tick_months]
     _tick_labels = [d.strftime("%b") for d in _tick_months]
@@ -372,11 +379,8 @@ def _(ar1_simulate, datetime, generate_temp_btn, go, mo, np, phi_temp, seasonal_
         hovertemplate="Day %{x}<br>%{y:.1f} °C<extra></extra>",
     ))
 
-    _r = ar1_simulate(phi_temp, sigma_temp)
-    _sim_temp = (seasonal_temp + _r).tolist()
-
     _fig4.add_trace(go.Scatter(
-        x=_x, y=_sim_temp,
+        x=_x, y=sim_temp,
         mode="lines", line=dict(color="rgba(50,50,50,0.7)", width=1.5),
         name="Simulated year",
         hovertemplate="Day %{x}<br>%{y:.1f} °C<extra></extra>",
@@ -430,7 +434,7 @@ def _(mo):
     | $T_{\text{base}}$ | 20 °C | Indoor target temperature |
     | $T_{\text{limit}}$ | 15 °C | Heating cut-off (no space heating above this) |
     | $k$ | adjustable (kW/K) | Aggregate fabric heat-loss coefficient |
-    | $P_{\text{base}} = 0.1\,k$ | kWh/day | Baseload (hot water, always-on) |
+    | $P_{\text{base}} = 4\,k$ | kWh/day | Baseload (hot water, always-on) |
 
     A typical UK semi-detached house has $k \approx 0.15$–$0.25$ kW/K; a
     neighbourhood of 100 homes is roughly $k = 15$–$25$ kW/K.
@@ -449,27 +453,16 @@ def _(mo):
 
 
 @app.cell
-def _(available_temp_years, datetime, df_temp, go, heat_k, mo, pl):
+def _(datetime, go, heat_k, mo, sim_temp):
     _T_BASE = 20
     _T_LIMIT = 15
     _k = heat_k.value
-    _P_BASE = _k * 0.1
+    _P_BASE = _k * 4
 
-    _df_demand = (
-        df_temp
-        .with_columns(
-            pl.when(pl.col("tmk") < _T_LIMIT)
-            .then(_k * (_T_BASE - pl.col("tmk")) + _P_BASE)
-            .otherwise(_P_BASE)
-            .alias("q_kwh")
-        )
-        .drop_nulls("q_kwh")
-    )
-
-    _colours = [
-        "31,119,180", "255,127,14", "44,160,44", "214,39,40",
-        "148,103,189", "140,86,75", "227,119,194", "127,127,127",
-        "188,189,34", "23,190,207",
+    _x = list(range(1, 366))
+    _q = [
+        _k * (_T_BASE - t) + _P_BASE if t < _T_LIMIT else _P_BASE
+        for t in sim_temp
     ]
 
     _tick_months = [datetime.date(2001, m, 1) for m in range(1, 13)]
@@ -477,127 +470,26 @@ def _(available_temp_years, datetime, df_temp, go, heat_k, mo, pl):
     _tick_labels = [d.strftime("%b") for d in _tick_months]
 
     _fig_demand = go.Figure()
-    for _i, _year in enumerate(available_temp_years):
-        _c = _colours[_i % len(_colours)]
-        _yr = _df_demand.filter(pl.col("year") == _year)
-        _fig_demand.add_trace(go.Scatter(
-            x=_yr["day_of_year"].to_list(),
-            y=_yr["q_kwh"].to_list(),
-            mode="lines",
-            line=dict(color=f"rgba({_c},0.7)", width=1.2),
-            name=str(_year),
-            hovertemplate=f"{_year} — day %{{x}}<br>%{{y:.0f}} kWh/day<extra></extra>",
-        ))
+    _fig_demand.add_trace(go.Scatter(
+        x=_x, y=_q,
+        mode="lines",
+        line=dict(color="rgba(214,39,40,0.8)", width=1.5),
+        name="Heat demand",
+        hovertemplate="Day %{x}<br>%{y:.0f} kWh/day<extra></extra>",
+    ))
 
     _fig_demand.update_layout(
-        title=f"Daily heat demand — all years  (k = {_k} kW/K)",
+        title=f"Nominal year heat demand  (k = {_k} kW/K)",
         xaxis=dict(
             title="",
             tickvals=_tick_doys, ticktext=_tick_labels,
             showgrid=True, gridcolor="#e5e5e5",
         ),
-        yaxis=dict(title="kWh/day", showgrid=True, gridcolor="#e5e5e5"),
+        yaxis=dict(title="kWh/day", showgrid=True, gridcolor="#e5e5e5", rangemode="tozero"),
         plot_bgcolor="white",
         hovermode="x unified",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         margin=dict(t=60, b=40, l=60, r=20),
         height=400,
     )
 
     mo.vstack([heat_k, mo.ui.plotly(_fig_demand)])
-
-
-@app.cell
-def _(available_temp_years, df_temp, go, heat_k, mo, pl):
-    _T_BASE = 20
-    _T_LIMIT = 15
-    _k = heat_k.value
-    _P_BASE = _k * 0.1
-
-    _df_sc = (
-        df_temp
-        .with_columns(
-            pl.when(pl.col("tmk") < _T_LIMIT)
-            .then(_k * (_T_BASE - pl.col("tmk")) + _P_BASE)
-            .otherwise(_P_BASE)
-            .alias("q_kwh")
-        )
-        .drop_nulls("q_kwh")
-    )
-
-    _colours = [
-        "31,119,180", "255,127,14", "44,160,44", "214,39,40",
-        "148,103,189", "140,86,75", "227,119,194", "127,127,127",
-        "188,189,34", "23,190,207",
-    ]
-
-    _fig_sc = go.Figure()
-    for _i, _year in enumerate(available_temp_years):
-        _c = _colours[_i % len(_colours)]
-        _yr = _df_sc.filter(pl.col("year") == _year)
-        _fig_sc.add_trace(go.Scatter(
-            x=_yr["tmk"].to_list(),
-            y=_yr["q_kwh"].to_list(),
-            mode="markers",
-            marker=dict(color=f"rgba({_c},0.55)", size=4),
-            name=str(_year),
-            hovertemplate=f"{_year} — %{{x:.1f}} °C → %{{y:.0f}} kWh/day<extra></extra>",
-        ))
-
-    _fig_sc.add_vline(
-        x=_T_LIMIT,
-        line=dict(color="rgba(0,0,0,0.3)", width=1, dash="dash"),
-        annotation_text=f"T_limit = {_T_LIMIT} °C",
-        annotation_position="top right",
-    )
-
-    _fig_sc.update_layout(
-        title=f"Temperature vs heat demand — all years  (k = {_k} kW/K)",
-        xaxis=dict(title="Daily mean temperature (°C)", showgrid=True, gridcolor="#e5e5e5"),
-        yaxis=dict(title="kWh/day", showgrid=True, gridcolor="#e5e5e5"),
-        plot_bgcolor="white",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(t=60, b=40, l=60, r=20),
-        height=400,
-    )
-
-    mo.ui.plotly(_fig_sc)
-
-
-@app.cell
-def _(df_temp, heat_k, mo, pl):
-    _T_BASE = 20
-    _T_LIMIT = 15
-    _k = heat_k.value
-    _P_BASE = _k * 0.1
-
-    _df_s = (
-        df_temp
-        .with_columns(
-            pl.when(pl.col("tmk") < _T_LIMIT)
-            .then(_k * (_T_BASE - pl.col("tmk")) + _P_BASE)
-            .otherwise(_P_BASE)
-            .alias("q_kwh")
-        )
-        .drop_nulls("q_kwh")
-    )
-
-    _annual = (
-        _df_s
-        .group_by("year")
-        .agg(pl.col("q_kwh").sum().alias("total_kwh"))
-        .sort("year")
-    )
-
-    _peak_row = _df_s.sort("q_kwh", descending=True).row(0, named=True)
-    _peak_kwh = _peak_row["q_kwh"]
-    _peak_date = _peak_row["date"].strftime("%d %b %Y")
-
-    mo.vstack([
-        mo.md("**Annual heat demand**"),
-        mo.hstack([
-            mo.stat(f"{row['total_kwh'] / 1000:,.0f} MWh", label=str(row["year"]))
-            for row in _annual.iter_rows(named=True)
-        ]),
-        mo.stat(f"{_peak_kwh:.0f} kWh/day", label=f"Peak daily demand ({_peak_date})"),
-    ])
