@@ -129,8 +129,8 @@ def _(mo, pathlib):
     _price_dir = pathlib.Path(__file__).parent.parent / "data" / "price_scenarios"
     _heat_dir = pathlib.Path(__file__).parent.parent / "data" / "heat_demand_scenarios"
 
-    _price_files = sorted(_price_dir.glob("*.csv"))
-    _heat_files = sorted(_heat_dir.glob("*.csv"))
+    _price_files = sorted(_price_dir.glob("*.csv"), key=lambda f: int("".join(filter(str.isdigit, f.stem)) or 0))
+    _heat_files = sorted(_heat_dir.glob("*.csv"), key=lambda f: int("".join(filter(str.isdigit, f.stem)) or 0))
 
     price_scenario_selector = mo.ui.dropdown(
         options={f.stem.replace("_", " ").title(): str(f) for f in _price_files},
