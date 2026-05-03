@@ -370,30 +370,21 @@ def _(datetime, generate_btn, go, mo, np, phi_hat, seasonal_price, sigma_hat, si
     _x = list(range(1, 366))
     _s = sigma_stationary
 
-    # Gradient bands: N thin rings from mean outward, alpha decreasing with distance.
-    # Render outer-to-inner so inner rings sit on top.
+    # Gradient bands: N full bands all centred on the seasonal mean, each with the
+    # same alpha. Drawn outer-to-inner so bands accumulate — the centre (covered by
+    # all N bands) appears darkest, fading smoothly to the outer edge.
     _N = 30
     _step = 2 * _s / _N
-    _max_alpha = 0.55  # alpha of the innermost ring
+    _band_alpha = 0.04  # per-band alpha; centre accumulates all N → ~0.70 effective
 
     _fig3 = go.Figure()
 
     for _i in range(_N, 0, -1):
-        _alpha = (_N - _i + 1) / _N * _max_alpha
-        _outer = _i * _step
-        _inner = (_i - 1) * _step
-        # Upper ring
+        _hw = _i * _step  # half-width of this band
         _fig3.add_trace(go.Scatter(
             x=_x + _x[::-1],
-            y=(seasonal_price + _outer).tolist() + (seasonal_price + _inner).tolist()[::-1],
-            fill="toself", fillcolor=f"rgba(31,119,180,{_alpha:.3f})",
-            line=dict(width=0), showlegend=False, hoverinfo="skip",
-        ))
-        # Lower ring (mirrored)
-        _fig3.add_trace(go.Scatter(
-            x=_x + _x[::-1],
-            y=(seasonal_price - _inner).tolist() + (seasonal_price - _outer).tolist()[::-1],
-            fill="toself", fillcolor=f"rgba(31,119,180,{_alpha:.3f})",
+            y=(seasonal_price + _hw).tolist() + (seasonal_price - _hw).tolist()[::-1],
+            fill="toself", fillcolor=f"rgba(31,119,180,{_band_alpha:.3f})",
             line=dict(width=0), showlegend=False, hoverinfo="skip",
         ))
 

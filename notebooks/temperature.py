@@ -355,24 +355,16 @@ def _(datetime, generate_temp_btn, go, mo, np, phi_temp, seasonal_temp, sigma_st
 
     _N = 30
     _step = 2 * _s / _N
-    _max_alpha = 0.55
+    _band_alpha = 0.04
 
     _fig4 = go.Figure()
 
     for _i in range(_N, 0, -1):
-        _alpha = (_N - _i + 1) / _N * _max_alpha
-        _outer = _i * _step
-        _inner = (_i - 1) * _step
+        _hw = _i * _step
         _fig4.add_trace(go.Scatter(
             x=_x + _x[::-1],
-            y=(seasonal_temp + _outer).tolist() + (seasonal_temp + _inner).tolist()[::-1],
-            fill="toself", fillcolor=f"rgba({_colour},{_alpha:.3f})",
-            line=dict(width=0), showlegend=False, hoverinfo="skip",
-        ))
-        _fig4.add_trace(go.Scatter(
-            x=_x + _x[::-1],
-            y=(seasonal_temp - _inner).tolist() + (seasonal_temp - _outer).tolist()[::-1],
-            fill="toself", fillcolor=f"rgba({_colour},{_alpha:.3f})",
+            y=(seasonal_temp + _hw).tolist() + (seasonal_temp - _hw).tolist()[::-1],
+            fill="toself", fillcolor=f"rgba({_colour},{_band_alpha:.3f})",
             line=dict(width=0), showlegend=False, hoverinfo="skip",
         ))
 
