@@ -5,6 +5,7 @@ Description: Germany/Luxembourg day-ahead electricity prices (2019–2025) with 
 
 import marimo
 
+__generated_with = "0.19.4"
 app = marimo.App(width="full")
 
 
@@ -414,3 +415,7 @@ def _(ar1_simulate, datetime, generate_btn, go, mo, np, phi_hat, seasonal_price,
         height=400,
     )
     mo.vstack([generate_btn, mo.ui.plotly(_fig3)])
+
+
+if __name__ == "__main__":
+    app.run()

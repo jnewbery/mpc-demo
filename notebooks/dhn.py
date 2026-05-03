@@ -5,6 +5,7 @@ Description: District heating networks (DHNs) in Saxony, sourced from RWTH Aache
 
 import marimo
 
+__generated_with = "0.19.4"
 app = marimo.App(width="full")
 
 
@@ -361,3 +362,7 @@ def _(df, go, mo):
         height=380,
     )
     mo.ui.plotly(_fig4)
+
+
+if __name__ == "__main__":
+    app.run()
