@@ -1,6 +1,6 @@
 """
-Title: 5. MPC controller
-Description: A rolling-horizon Model Predictive Control (MPC) strategy for the thermal energy storage problem.
+Title: MPC controller
+Description: A rolling-horizon Model Predictive Control (MPC) strategy for the thermal energy storage problem
 """
 
 import marimo

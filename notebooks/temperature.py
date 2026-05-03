@@ -1,5 +1,5 @@
 """
-Title: 2. Temperature
+Title: Temperature
 Description: Daily mean temperatures at Görlitz (DWD station 01684), 2015–2024
 """
 

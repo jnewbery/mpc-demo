@@ -14,15 +14,29 @@ def imports():
 
 @app.cell
 def show_index(ast, mo, pathlib):
+    NOTEBOOK_ORDER = [
+        "dhn.py",
+        "prices.py",
+        "temperature.py",
+        "simulation.py",
+        "lp.py",
+        "mpc.py",
+    ]
+
     # 1. Get the directory of the current notebook
     # __file__ works in marimo to get the current script path
     current_dir = pathlib.Path(__file__).parent
 
     # 2. Find all .py files (excluding this index file)
-    notebooks = sorted([
-        f for f in current_dir.glob("*.py") 
+    all_notebooks = [
+        f for f in current_dir.glob("*.py")
         if f.name != "index.py" and not f.name.startswith("_")
-    ])
+    ]
+    order_map = {name: i for i, name in enumerate(NOTEBOOK_ORDER)}
+    notebooks = sorted(
+        all_notebooks,
+        key=lambda f: (order_map.get(f.name, len(NOTEBOOK_ORDER)), f.name),
+    )
 
     def parse_metadata(notebook_path):
         docstring = ast.get_docstring(ast.parse(notebook_path.read_text()))
@@ -49,8 +63,6 @@ def show_index(ast, mo, pathlib):
         url = f"/notebooks/{nb.stem}"
 
         rows.append((f"[{human_name}]({url})", description or ""))
-
-    rows.sort(key=lambda x: x[0])  # Sort by title
 
     # 4. Display the dashboard
     table_rows = "\n".join(f"| {title} | {description} |" for title, description in rows)

@@ -1,6 +1,6 @@
 """
-Title: 1. Day-ahead prices
-Description: Germany/Luxembourg day-ahead electricity prices (2019–2025) with fourier regression and AR(1) residual model.
+Title: Day-ahead prices
+Description: Germany/Luxembourg day-ahead electricity prices (2019–2025) with fourier regression and AR(1) residual model
 """
 
 import marimo

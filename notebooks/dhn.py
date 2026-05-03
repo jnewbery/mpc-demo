@@ -1,5 +1,5 @@
 """
-Title: 0. District Heating Networks
+Title: District Heating Networks
 Description: District heating networks (DHNs) in Saxony, sourced from RWTH Aachen University
 """
 
