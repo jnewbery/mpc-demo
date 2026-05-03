@@ -161,8 +161,8 @@ def main() -> None:
         out_path = pathlib.Path(f"{output}_{i}.csv")
         with out_path.open("w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["day_of_year", "price"])
-            writer.writerows(zip(days_col, scenario_prices))
+            writer.writerow(["day_of_year", "seasonal", "price"])
+            writer.writerows(zip(days_col, seasonal.tolist(), scenario_prices))
         print(f"Wrote {out_path}")
 
 
