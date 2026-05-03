@@ -18,8 +18,9 @@ def _():
     import polars as pl
     import plotly.graph_objects as go
     from src.fourier import fourier_seasonal_fit
+    from src.heat_demand import calibrate, compute_demand
     from src.simulation import ar1_fit, ar1_simulate
-    return ar1_fit, ar1_simulate, datetime, fourier_seasonal_fit, go, mo, np, pathlib, pl
+    return ar1_fit, ar1_simulate, calibrate, compute_demand, datetime, fourier_seasonal_fit, go, mo, np, pathlib, pl
 
 
 @app.cell
@@ -30,8 +31,7 @@ def _(mo):
     Historical daily mean air temperatures (°C) for the Görlitz weather station
     (DWD station ID 01684), sourced from the **Deutscher Wetterdienst (DWD)** open
     data portal:
-    [opendata.dwd.de — daily climate observations, historical](https://opendata.dwd.de/climate_environment/CDC/observations_germany/climate/daily/kl/historical/)
-
+    [opendata.dwd.de — daily climate observations, historical](https://opendata.dwd.de/climate_environment/CDC/observations_germany/climate/daily/kl/historical/).
     The column used is `TMK` (daily mean temperature at 2 m height).
     """)
     return
@@ -403,12 +403,8 @@ def _(datetime, generate_temp_btn, go, mo, np, seasonal_temp, sigma_stat_temp, s
 
 
 @app.cell
-def _(goerlitz_dh_demand_mwh, np, seasonal_temp):
-    _T_BASE = 20.0
-    _T_LIMIT = 15.0
-    p_base_goerlitz = 0.2 * goerlitz_dh_demand_mwh / 365  # MWh/day: hot water = 20% of annual demand
-    _hdd = float(np.where(seasonal_temp < _T_LIMIT, _T_BASE - seasonal_temp, 0.0).sum())
-    k_goerlitz = 0.8 * goerlitz_dh_demand_mwh / _hdd
+def _(calibrate, goerlitz_dh_demand_mwh, seasonal_temp):
+    k_goerlitz, p_base_goerlitz = calibrate(seasonal_temp, goerlitz_dh_demand_mwh)
     return k_goerlitz, p_base_goerlitz
 
 
@@ -456,16 +452,9 @@ def _(goerlitz_dh_demand_mwh, k_goerlitz, mo, p_base_goerlitz):
 
 
 @app.cell
-def _(datetime, go, k_goerlitz, mo, p_base_goerlitz, sim_temp):
-    _T_BASE = 20
-    _T_LIMIT = 15
-    _P_BASE = p_base_goerlitz
-
+def _(compute_demand, datetime, go, k_goerlitz, mo, np, p_base_goerlitz, sim_temp):
     _x = list(range(1, 366))
-    _q = [
-        k_goerlitz * (_T_BASE - t) + _P_BASE if t < _T_LIMIT else _P_BASE
-        for t in sim_temp
-    ]
+    _q = compute_demand(np.array(sim_temp), k_goerlitz, p_base_goerlitz).tolist()
 
     _tick_months = [datetime.date(2001, m, 1) for m in range(1, 13)]
     _tick_doys = [d.timetuple().tm_yday for d in _tick_months]
