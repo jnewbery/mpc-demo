@@ -49,6 +49,62 @@ def _(df, mo):
 
 
 @app.cell
+def _(df, mo):
+    sel_muni = mo.ui.dropdown(
+        options=["(none)"] + sorted(df["GEN"].unique().to_list()),
+        value="(none)",
+        label="Municipality",
+    )
+    return (sel_muni,)
+
+
+@app.cell
+def _(df, mo, pl, sel_muni):
+    _m = sel_muni.value
+    _dhn_opts = ["(none)"] + (
+        df.filter(pl.col("GEN") == _m)["ID"].sort().to_list() if _m != "(none)" else []
+    )
+    sel_dhn = mo.ui.dropdown(
+        options=_dhn_opts,
+        value="(none)",
+        label="Specific DHN (optional)",
+    )
+    return (sel_dhn,)
+
+
+@app.cell
+def _(mo, sel_dhn, sel_muni):
+    mo.hstack([sel_muni, sel_dhn], justify="start")
+
+
+@app.cell
+def _(df, mo, pl, sel_dhn, sel_muni):
+    _m = sel_muni.value
+    _d = sel_dhn.value
+    if _d != "(none)":
+        _row = df.filter(pl.col("ID") == _d).row(0, named=True)
+        _out = mo.hstack([
+            mo.stat(f"{_row['DH_demand']:,.0f} MWh/yr", label="DH demand"),
+            mo.stat(f"{int(_row['DH_supplied_households']):,}", label="households"),
+            mo.stat(f"{_row['area']:.3f} km²", label="area"),
+            mo.stat(f"{_row['share_DH']:.1f}%", label="DH share"),
+            mo.stat(f"{_row['heat_density_DH']:.2f} GWh/km²/yr", label="heat density"),
+        ])
+    elif _m != "(none)":
+        _agg = df.filter(pl.col("GEN") == _m)
+        _out = mo.hstack([
+            mo.stat(f"{_agg['DH_demand'].sum():,.0f} MWh/yr", label="total DH demand"),
+            mo.stat(f"{int(_agg['DH_supplied_households'].sum()):,}", label="households"),
+            mo.stat(str(len(_agg)), label="DHNs"),
+            mo.stat(f"{_agg['share_DH'].mean():.1f}%", label="avg DH share"),
+            mo.stat(f"{_agg['heat_density_DH'].mean():.2f} GWh/km²/yr", label="avg heat density"),
+        ])
+    else:
+        _out = mo.md("*Select a municipality above to highlight it across all charts.*")
+    _out
+
+
+@app.cell
 def _(mo):
     mo.md(r"""
     ## DH demand vs households supplied
@@ -61,46 +117,66 @@ def _(mo):
 
 
 @app.cell
-def _(df, go, mo):
-    _x = df["DH_supplied_households"].to_list()
-    _y = df["DH_demand"].to_list()
-    _hover = [
-        f"{row['GEN']} — {row['ID']}<br>"
-        f"DH demand: {row['DH_demand']:,.0f} MWh/yr<br>"
-        f"Households: {int(row['DH_supplied_households']):,}<br>"
-        f"DH share: {row['share_DH']:.1f}%<br>"
-        f"Heat density: {row['heat_density_DH']:.2f} GWh/yr/km²"
-        for row in df.iter_rows(named=True)
-    ]
+def _(df, go, mo, pl, sel_dhn, sel_muni):
+    _m = sel_muni.value
+    _d = sel_dhn.value
 
-    _fig1 = go.Figure(go.Scatter(
-        x=_x, y=_y,
+    def _hover(row):
+        return (
+            f"{row['GEN']} — {row['ID']}<br>"
+            f"DH demand: {row['DH_demand']:,.0f} MWh/yr<br>"
+            f"Households: {int(row['DH_supplied_households']):,}<br>"
+            f"DH share: {row['share_DH']:.1f}%<br>"
+            f"Heat density: {row['heat_density_DH']:.2f} GWh/yr/km²"
+        )
+
+    if _d != "(none)":
+        _df_hi = df.filter(pl.col("ID") == _d)
+        _df_lo = df.filter(pl.col("ID") != _d)
+    elif _m != "(none)":
+        _df_hi = df.filter(pl.col("GEN") == _m)
+        _df_lo = df.filter(pl.col("GEN") != _m)
+    else:
+        _df_hi = None
+        _df_lo = df
+
+    _fig1 = go.Figure()
+    _fig1.add_trace(go.Scatter(
+        x=_df_lo["DH_supplied_households"].to_list(),
+        y=_df_lo["DH_demand"].to_list(),
         mode="markers",
         marker=dict(
-            colorscale="Viridis",
-            size=6,
-            opacity=0.7,
+            color="rgba(150,150,150,0.4)" if _df_hi is not None else "rgba(31,119,180,0.6)",
+            size=5 if _df_hi is not None else 6,
             line=dict(width=0),
         ),
-        text=_hover,
+        text=[_hover(r) for r in _df_lo.iter_rows(named=True)],
         hovertemplate="%{text}<extra></extra>",
+        showlegend=False,
     ))
+    if _df_hi is not None:
+        _fig1.add_trace(go.Scatter(
+            x=_df_hi["DH_supplied_households"].to_list(),
+            y=_df_hi["DH_demand"].to_list(),
+            mode="markers",
+            marker=dict(
+                color="rgba(255,127,14,0.9)",
+                size=10,
+                line=dict(color="rgba(200,90,0,1)", width=1),
+            ),
+            text=[_hover(r) for r in _df_hi.iter_rows(named=True)],
+            hovertemplate="%{text}<extra></extra>",
+            showlegend=False,
+        ))
 
     _fig1.update_layout(
         title="DH annual demand vs households supplied",
-        xaxis=dict(
-            title="Households supplied",
-            type="log", showgrid=True, gridcolor="#e5e5e5",
-        ),
-        yaxis=dict(
-            title="DH demand (MWh/year)",
-            type="log", showgrid=True, gridcolor="#e5e5e5",
-        ),
+        xaxis=dict(title="Households supplied", type="log", showgrid=True, gridcolor="#e5e5e5"),
+        yaxis=dict(title="DH demand (MWh/year)", type="log", showgrid=True, gridcolor="#e5e5e5"),
         plot_bgcolor="white",
         margin=dict(t=60, b=50, l=70, r=20),
         height=450,
     )
-
     mo.ui.plotly(_fig1)
 
 
@@ -118,33 +194,67 @@ def _(mo):
 
 
 @app.cell
-def _(df, go, mo, np):
-    _x = df["share_DH"].to_list()
-    _y = df["heat_density_DH"].to_list()
+def _(df, go, mo, np, pl, sel_dhn, sel_muni):
+    _m = sel_muni.value
+    _d = sel_dhn.value
 
-    _raw = np.sqrt(df["DH_demand"].to_numpy())
-    _sizes = (4 + 36 * (_raw - _raw.min()) / (_raw.max() - _raw.min())).tolist()
+    _raw_all = np.sqrt(df["DH_demand"].to_numpy())
+    _rmin, _rmax = _raw_all.min(), _raw_all.max()
 
-    _hover2 = [
-        f"{row['GEN']} — {row['ID']}<br>"
-        f"DH share: {row['share_DH']:.1f}%<br>"
-        f"Heat density: {row['heat_density_DH']:.2f} GWh/yr/km²<br>"
-        f"DH demand: {row['DH_demand']:,.0f} MWh/yr<br>"
-        f"Area: {row['area']:.3f} km²"
-        for row in df.iter_rows(named=True)
-    ]
+    def _sizes(sub_df):
+        _r = np.sqrt(sub_df["DH_demand"].to_numpy())
+        return (4 + 36 * (_r - _rmin) / (_rmax - _rmin)).tolist()
 
-    _fig2 = go.Figure(go.Scatter(
-        x=_x, y=_y,
+    def _hover2(row):
+        return (
+            f"{row['GEN']} — {row['ID']}<br>"
+            f"DH share: {row['share_DH']:.1f}%<br>"
+            f"Heat density: {row['heat_density_DH']:.2f} GWh/yr/km²<br>"
+            f"DH demand: {row['DH_demand']:,.0f} MWh/yr<br>"
+            f"Area: {row['area']:.3f} km²"
+        )
+
+    if _d != "(none)":
+        _df_hi = df.filter(pl.col("ID") == _d)
+        _df_lo = df.filter(pl.col("ID") != _d)
+    elif _m != "(none)":
+        _df_hi = df.filter(pl.col("GEN") == _m)
+        _df_lo = df.filter(pl.col("GEN") != _m)
+    else:
+        _df_hi = None
+        _df_lo = df
+
+    _fig2 = go.Figure()
+    _fig2.add_trace(go.Scatter(
+        x=_df_lo["share_DH"].to_list(),
+        y=_df_lo["heat_density_DH"].to_list(),
         mode="markers",
         marker=dict(
-            size=_sizes,
-            color="rgba(31,119,180,0.45)",
-            line=dict(color="rgba(31,119,180,0.8)", width=0.8),
+            size=_sizes(_df_lo),
+            color="rgba(150,150,150,0.3)" if _df_hi is not None else "rgba(31,119,180,0.45)",
+            line=dict(
+                color="rgba(120,120,120,0.5)" if _df_hi is not None else "rgba(31,119,180,0.8)",
+                width=0.8,
+            ),
         ),
-        text=_hover2,
+        text=[_hover2(r) for r in _df_lo.iter_rows(named=True)],
         hovertemplate="%{text}<extra></extra>",
+        showlegend=False,
     ))
+    if _df_hi is not None:
+        _fig2.add_trace(go.Scatter(
+            x=_df_hi["share_DH"].to_list(),
+            y=_df_hi["heat_density_DH"].to_list(),
+            mode="markers",
+            marker=dict(
+                size=_sizes(_df_hi),
+                color="rgba(255,127,14,0.85)",
+                line=dict(color="rgba(200,90,0,1)", width=1),
+            ),
+            text=[_hover2(r) for r in _df_hi.iter_rows(named=True)],
+            hovertemplate="%{text}<extra></extra>",
+            showlegend=False,
+        ))
 
     _fig2.update_layout(
         title="Heat density vs DH market share  (bubble size ∝ DH demand)",
@@ -154,7 +264,6 @@ def _(df, go, mo, np):
         margin=dict(t=60, b=50, l=70, r=20),
         height=450,
     )
-
     mo.ui.plotly(_fig2)
 
 
@@ -169,8 +278,12 @@ def _(mo):
 
 
 @app.cell
-def _(df, go, mo, pl):
+def _(df, go, mo, pl, sel_dhn, sel_muni):
     TOP_N = 20
+    _m = sel_muni.value
+    _d = sel_dhn.value
+    _hi_muni = df.filter(pl.col("ID") == _d)["GEN"][0] if _d != "(none)" else _m
+
     _agg = (
         df.group_by("GEN")
         .agg(
@@ -183,12 +296,17 @@ def _(df, go, mo, pl):
         .sort("DH_demand_MWh")
     )
 
+    _colors = [
+        "rgba(255,127,14,0.9)" if gen == _hi_muni else "rgba(44,160,44,0.75)"
+        for gen in _agg["GEN"].to_list()
+    ]
+
     _fig3 = go.Figure()
     _fig3.add_trace(go.Bar(
         y=_agg["GEN"].to_list(),
         x=(_agg["DH_demand_MWh"] / 1000).to_list(),
         orientation="h",
-        marker_color="rgba(44,160,44,0.75)",
+        marker_color=_colors,
         customdata=list(zip(
             [int(v) for v in _agg["households"].to_list()],
             _agg["n_networks"].to_list(),
@@ -209,7 +327,6 @@ def _(df, go, mo, pl):
         margin=dict(t=60, b=50, l=120, r=20),
         height=max(300, TOP_N * 28),
     )
-
     mo.ui.plotly(_fig3)
 
 
@@ -231,7 +348,7 @@ def _(df, go, mo):
         nbinsx=40,
         marker_color="rgba(214,39,40,0.65)",
         marker_line=dict(color="rgba(214,39,40,0.9)", width=0.5),
-        hovertemplate="Share: %{x:.0f}–%{x:.0f}%<br>Count: %{y}<extra></extra>",
+        hovertemplate="Share: %{x:.0f}%<br>Count: %{y}<extra></extra>",
     ))
 
     _fig4.update_layout(
@@ -243,5 +360,4 @@ def _(df, go, mo):
         margin=dict(t=60, b=50, l=60, r=20),
         height=380,
     )
-
     mo.ui.plotly(_fig4)
