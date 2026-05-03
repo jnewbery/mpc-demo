@@ -15,7 +15,8 @@ def _():
     import numpy as np
     import polars as pl
     import plotly.graph_objects as go
-    return datetime, go, mo, np, pl
+    from src.fourier import fourier_seasonal_fit
+    return datetime, fourier_seasonal_fit, go, mo, np, pl
 
 
 @app.cell
@@ -153,7 +154,7 @@ def _(available_temp_years, mo):
 
 
 @app.cell
-def _(available_temp_years, datetime, df_temp, go, mo, np, pl, temp_k_harmonics, temp_regression_years):
+def _(available_temp_years, datetime, df_temp, fourier_seasonal_fit, go, mo, np, pl, temp_k_harmonics, temp_regression_years):
     K_temp = temp_k_harmonics.value
 
     _all = df_temp.filter(
@@ -162,17 +163,8 @@ def _(available_temp_years, datetime, df_temp, go, mo, np, pl, temp_k_harmonics,
     _doys = _all.get_column("day_of_year").to_numpy().astype(float)
     _tmks = _all.get_column("tmk").to_numpy()
 
-    def _fourier_features(doys, k):
-        cols = [np.ones(len(doys))]
-        for _k in range(1, k + 1):
-            cols.append(np.cos(2 * np.pi * _k * doys / 365.25))
-            cols.append(np.sin(2 * np.pi * _k * doys / 365.25))
-        return np.column_stack(cols)
-
-    _coeffs, _, _, _ = np.linalg.lstsq(_fourier_features(_doys, K_temp), _tmks, rcond=None)
-
     _doy_range = np.arange(1, 366, dtype=float)
-    seasonal_temp = _fourier_features(_doy_range, K_temp) @ _coeffs
+    seasonal_temp = fourier_seasonal_fit(_doys, _tmks, K_temp)
 
     _tick_months = [datetime.date(2001, m, 1) for m in range(1, 13)]
     _tick_doys = [d.timetuple().tm_yday for d in _tick_months]

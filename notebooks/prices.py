@@ -15,7 +15,8 @@ def _():
     import numpy as np
     import polars as pl
     import plotly.graph_objects as go
-    return datetime, go, mo, np, pl
+    from src.fourier import fourier_seasonal_fit
+    return datetime, fourier_seasonal_fit, go, mo, np, pl
 
 
 @app.cell
@@ -157,8 +158,7 @@ def _(available_years, mo):
 
 
 @app.cell
-def _(available_years, datetime, df, go, k_harmonics, mo, np, pl, regression_years):
-    # Fourier regression: price(d) = a0 + sum_{k=1}^{K} [a_k cos(2πkd/365) + b_k sin(2πkd/365)]
+def _(available_years, datetime, df, fourier_seasonal_fit, go, k_harmonics, mo, np, pl, regression_years):
     K = k_harmonics.value
 
     _all = df.filter(
@@ -167,18 +167,8 @@ def _(available_years, datetime, df, go, k_harmonics, mo, np, pl, regression_yea
     _doys = _all.get_column("day_of_year").to_numpy().astype(float)
     _prices = _all.get_column("price").to_numpy()
 
-    def _fourier_features(doys, k):
-        cols = [np.ones(len(doys))]
-        for _k in range(1, k + 1):
-            cols.append(np.cos(2 * np.pi * _k * doys / 365.25))
-            cols.append(np.sin(2 * np.pi * _k * doys / 365.25))
-        return np.column_stack(cols)
-
-    _X = _fourier_features(_doys, K)
-    _coeffs, _, _, _ = np.linalg.lstsq(_X, _prices, rcond=None)
-
     _doy_range = np.arange(1, 366, dtype=float)
-    seasonal_price = _fourier_features(_doy_range, K) @ _coeffs
+    seasonal_price = fourier_seasonal_fit(_doys, _prices, K)
 
     # Build tick labels
     _tick_months = [datetime.date(2001, m, 1) for m in range(1, 13)]
