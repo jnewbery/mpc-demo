@@ -1,6 +1,6 @@
 """
-Title: Simulation
-Description: A simple generative model of daily energy prices and heat demand, with a forecast
+Title: Forecast
+Description: Price and heat demand forecasts against pre-generated nominal scenarios
 """
 
 import marimo
