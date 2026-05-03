@@ -16,7 +16,8 @@ def _():
     import polars as pl
     import plotly.graph_objects as go
     from src.fourier import fourier_seasonal_fit
-    return datetime, fourier_seasonal_fit, go, mo, np, pl
+    from src.simulation import ar1_fit, ar1_simulate
+    return ar1_fit, ar1_simulate, datetime, fourier_seasonal_fit, go, mo, np, pl
 
 
 @app.cell
@@ -268,7 +269,7 @@ def _(mo):
 
 
 @app.cell
-def _(df_temp, np, pl, seasonal_temp, temp_regression_years):
+def _(ar1_fit, df_temp, np, pl, seasonal_temp, temp_regression_years):
     _included = temp_regression_years.value
     _year_residuals_temp = []
 
@@ -279,15 +280,9 @@ def _(df_temp, np, pl, seasonal_temp, temp_regression_years):
             .filter(pl.col("tmk").is_not_null())
         )
         _doys = np.clip(_ydf.get_column("day_of_year").to_numpy() - 1, 0, 364)
-        _resid = _ydf.get_column("tmk").to_numpy() - seasonal_temp[_doys]
-        _year_residuals_temp.append(_resid)
+        _year_residuals_temp.append(_ydf.get_column("tmk").to_numpy() - seasonal_temp[_doys])
 
-    _r0 = np.concatenate([r[:-1] for r in _year_residuals_temp])
-    _r1 = np.concatenate([r[1:] for r in _year_residuals_temp])
-
-    phi_temp = float(np.dot(_r0, _r1) / np.dot(_r0, _r0))
-    sigma_temp = float(np.std(_r1 - phi_temp * _r0, ddof=1))
-    sigma_stat_temp = float(np.std(np.concatenate(_year_residuals_temp), ddof=1))
+    phi_temp, sigma_temp, sigma_stat_temp = ar1_fit(_year_residuals_temp)
     n_years_temp = len(_included)
     n_obs_temp = sum(len(r) for r in _year_residuals_temp)
     return n_obs_temp, n_years_temp, phi_temp, sigma_stat_temp, sigma_temp
@@ -336,7 +331,7 @@ def _(mo):
 
 
 @app.cell
-def _(datetime, generate_temp_btn, go, mo, np, phi_temp, seasonal_temp, sigma_stat_temp, sigma_temp):
+def _(ar1_simulate, datetime, generate_temp_btn, go, mo, np, phi_temp, seasonal_temp, sigma_stat_temp, sigma_temp):
     _tick_months = [datetime.date(2001, m, 1) for m in range(1, 13)]
     _tick_doys = [d.timetuple().tm_yday for d in _tick_months]
     _tick_labels = [d.strftime("%b") for d in _tick_months]
@@ -377,11 +372,7 @@ def _(datetime, generate_temp_btn, go, mo, np, phi_temp, seasonal_temp, sigma_st
         hovertemplate="Day %{x}<br>%{y:.1f} °C<extra></extra>",
     ))
 
-    _rng = np.random.default_rng()
-    _r = np.empty(365)
-    _r[0] = _rng.normal(0, sigma_stat_temp)
-    for _t in range(1, 365):
-        _r[_t] = phi_temp * _r[_t - 1] + _rng.normal(0, sigma_temp)
+    _r = ar1_simulate(phi_temp, sigma_temp)
     _sim_temp = (seasonal_temp + _r).tolist()
 
     _fig4.add_trace(go.Scatter(

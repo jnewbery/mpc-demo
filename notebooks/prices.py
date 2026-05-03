@@ -16,7 +16,8 @@ def _():
     import polars as pl
     import plotly.graph_objects as go
     from src.fourier import fourier_seasonal_fit
-    return datetime, fourier_seasonal_fit, go, mo, np, pl
+    from src.simulation import ar1_fit, ar1_simulate
+    return ar1_fit, ar1_simulate, datetime, fourier_seasonal_fit, go, mo, np, pl
 
 
 @app.cell
@@ -273,12 +274,9 @@ def _(mo):
 
 
 @app.cell
-def _(df, mo, np, pl, regression_years, seasonal_price):
-    # Detrend: subtract the seasonal fit from each day's price.
-    # Only use years included in the regression, and only cross consecutive
-    # days within the same year (never bridge the year boundary).
+def _(ar1_fit, df, np, pl, regression_years, seasonal_price):
     _included = regression_years.value
-    _year_residuals = []  # list of 1-D arrays, one per year
+    _year_residuals = []
 
     for _year in _included:
         _ydf = (
@@ -287,23 +285,9 @@ def _(df, mo, np, pl, regression_years, seasonal_price):
             .filter(pl.col("price").is_not_null())
         )
         _doys = np.clip(_ydf.get_column("day_of_year").to_numpy() - 1, 0, 364)
-        _prices = _ydf.get_column("price").to_numpy()
-        _resid = _prices - seasonal_price[_doys]
-        _year_residuals.append(_resid)
+        _year_residuals.append(_ydf.get_column("price").to_numpy() - seasonal_price[_doys])
 
-    # AR(1): r[t+1] = φ * r[t] + ε  — fit within each year, never across year boundary
-    _r0_all, _r1_all = [], []
-    for _resid in _year_residuals:
-        _r0_all.append(_resid[:-1])
-        _r1_all.append(_resid[1:])
-    _r0 = np.concatenate(_r0_all)
-    _r1 = np.concatenate(_r1_all)
-
-    # OLS: φ = (r0 · r1) / (r0 · r0)
-    phi_hat = float(np.dot(_r0, _r1) / np.dot(_r0, _r0))
-    innovations = _r1 - phi_hat * _r0
-    sigma_hat = float(np.std(innovations, ddof=1))
-    sigma_stationary = float(np.std(np.concatenate(_year_residuals), ddof=1))
+    phi_hat, sigma_hat, sigma_stationary = ar1_fit(_year_residuals)
     n_years = len(_included)
     n_obs = sum(len(r) for r in _year_residuals)
     return n_obs, n_years, phi_hat, sigma_hat, sigma_stationary
@@ -352,7 +336,7 @@ def _(mo):
 
 
 @app.cell
-def _(datetime, generate_btn, go, mo, np, phi_hat, seasonal_price, sigma_hat, sigma_stationary):
+def _(ar1_simulate, datetime, generate_btn, go, mo, np, phi_hat, seasonal_price, sigma_hat, sigma_stationary):
     _tick_months = [datetime.date(2001, m, 1) for m in range(1, 13)]
     _tick_doys = [d.timetuple().tm_yday for d in _tick_months]
     _tick_labels = [d.strftime("%b") for d in _tick_months]
@@ -398,12 +382,7 @@ def _(datetime, generate_btn, go, mo, np, phi_hat, seasonal_price, sigma_hat, si
     ))
 
     # AR(1) simulated year — re-generated every time the button is pressed
-    _rng = np.random.default_rng()
-    _sigma_stationary = sigma_hat / np.sqrt(1 - phi_hat ** 2)
-    _r = np.empty(365)
-    _r[0] = _rng.normal(0, _sigma_stationary)
-    for _t in range(1, 365):
-        _r[_t] = phi_hat * _r[_t - 1] + _rng.normal(0, sigma_hat)
+    _r = ar1_simulate(phi_hat, sigma_hat)
     _sim_prices = np.maximum(0, seasonal_price + _r).tolist()
 
     _fig3.add_trace(go.Scatter(
