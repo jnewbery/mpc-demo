@@ -12,17 +12,15 @@ app = marimo.App(width="full")
 @app.cell
 def _():
     import dataclasses
+    import pathlib
     import marimo as mo
     import numpy as np
+    import polars as pl
     import plotly.graph_objects as go
-    import sys
-    sys.path.insert(0, ".")
 
     from src.simulation import (
         SimulationParams,
-        generate_seasonal_prices,
         generate_seasonal_demand,
-        generate_price_series,
         generate_demand_series,
         generate_price_forecast,
         generate_raw_price_forecast,
@@ -33,13 +31,13 @@ def _():
         dataclasses,
         generate_demand_series,
         generate_price_forecast,
-        generate_price_series,
         generate_raw_price_forecast,
         generate_seasonal_demand,
-        generate_seasonal_prices,
         go,
         mo,
         np,
+        pathlib,
+        pl,
     )
 
 
@@ -48,35 +46,27 @@ def _(mo):
     mo.md(r"""
     # Simulation
 
-    Three time series are generated over a 365-day year ($t = 0$ $\implies$ 1 January).
+    ---
+
+    ## Price scenario
+
+    The price time series and its seasonal baseline are imported from a pre-generated
+    scenario file (select below).  Each scenario is produced by fitting a Fourier
+    regression and AR(1) residual model to historical Germany/Luxembourg day-ahead
+    prices — see the [prices notebook](../prices) for details.
+
+    The CSV contains both the scenario price path $P_t$ and the fitted seasonal curve
+    $S_t$, which is used as the long-run convergence target for the forecast below.
 
     ---
 
-    ## Seasonal baseline
+    ## Heat demand
 
-    The smooth annual price cycle is a cosine with a winter peak:
-
-    $$S_t = \mu + A \cos\!\left(\frac{2\pi t}{365}\right)$$
-
-    where $\mu$ is the annual mean price and $A$ is the seasonal amplitude.
-
-    The heat demand baseline follows the same cosine structure, but is additionally scaled by a weekend multiplier $m_t$ to capture the systematic reduction in demand on non-working days:
+    Heat demand is generated synthetically. The seasonal baseline follows a cosine with a winter peak, scaled by a weekend multiplier $m_t$:
 
     $$S^D_t = \left(\mu_D + A_D \cos\!\left(\frac{2\pi t}{365}\right)\right) \cdot m_t, \qquad m_t = \begin{cases} 0.8 & t \bmod 7 \in \{5, 6\} \\ 1.0 & \text{otherwise} \end{cases}$$
 
-    ---
-
-    ## True price
-
-    Day-to-day price variability is modelled as an AR(1) process layered on top of the seasonal baseline:
-
-    $$\varepsilon_t = \phi\,\varepsilon_{t-1} + \sigma z_t, \qquad z_t \overset{\text{iid}}{\sim} \mathcal{N}(0,1)$$
-
-    $$P_t = \max\!\left(0,\; S_t + \varepsilon_t\right)$$
-
-    The unconditional standard deviation of the noise is $\sigma_\infty = \sigma / \sqrt{1 - \phi^2}$.
-
-    True heat demand follows the same AR(1) structure on top of its seasonal baseline, with $\phi_D = 0.90$ reflecting the stronger day-to-day persistence of weather systems:
+    Day-to-day variability is an AR(1) process with $\phi_D = 0.90$, reflecting the stronger persistence of weather systems:
 
     $$\delta_t = \phi_D\,\delta_{t-1} + \sigma_D z_t, \qquad D_t = \max\!\left(0,\; S^D_t + \delta_t\right)$$
 
@@ -87,32 +77,34 @@ def _(mo):
     A forecast made at time $t$ for horizon $h$ is constructed in two steps.
 
     **Step 1 — forecast deviation random walk.**
-    The forecaster knows the current deviation from seasonal exactly, then projects it forward with growing uncertainty:
+    The forecaster knows the current deviation from the scenario seasonal exactly, then projects it forward with growing uncertainty:
 
     $$\hat{d}_0 = P_t - S_t, \qquad \hat{d}_h = \hat{d}_{h-1} + \sigma_\text{step}\, z_h$$
 
-    where $\sigma_\text{step} = \sigma_\infty / \sqrt{H_\text{long}}$ is calibrated so that the forecast uncertainty reaches $\sigma_\infty$ by the long-term horizon $H_\text{long}$. Because the walk is independent of the true future prices, the forecast can drift further from the seasonal average than the true price does.
+    where $\sigma_\text{step} = \sigma_\infty / \sqrt{H_\text{long}}$ is calibrated so that the forecast uncertainty reaches $\sigma_\infty$ by the long-term horizon $H_\text{long}$.
 
     **Step 2 — blend toward the seasonal average.**
-    The prediction weights the forecast deviation against the seasonal baseline via a blending weight $\alpha(h)$:
+    The prediction weights the forecast deviation against the scenario seasonal $S_t$ via a blending weight $\alpha(h)$:
 
     $$\hat{P}_{t+h} = S_{t+h} + \alpha(h)\,\hat{d}_h$$
 
     $$\alpha(h) = \begin{cases} 1 & h \le H_\text{short} \\ \dfrac{1}{2}\!\left(1 + \cos\!\left(\pi\,\dfrac{h - H_\text{short}}{H_\text{long} - H_\text{short}}\right)\right) & H_\text{short} < h < H_\text{long} \\ 0 & h \ge H_\text{long} \end{cases}$$
 
-    For $h \le H_\text{short}$ the forecast deviation is weighted fully, so the prediction closely tracks the true price. For $h \ge H_\text{long}$ the weight is zero, so the prediction equals the seasonal average. The **forecast accuracy** slider controls $H_\text{short}$, with $H_\text{long} = H_\text{short} + 23$.
+    For $h \le H_\text{short}$ the forecast closely tracks the true price. For $h \ge H_\text{long}$ the weight is zero and the forecast converges to $S_t$. The **forecast horizon** slider controls $H_\text{short}$ and $H_\text{long}$.
     """)
     return
 
 
 @app.cell
-def _(mo, np):
-    get_price_seed, set_price_seed = mo.state(42)
-    regen_price = mo.ui.run_button(
-        label="Regenerate price",
-        on_change=lambda _: set_price_seed(int(np.random.randint(0, 100_000))),
+def _(mo, pathlib):
+    _scenario_dir = pathlib.Path(__file__).parent.parent / "data" / "price_scenarios"
+    _files = sorted(_scenario_dir.glob("*.csv"))
+    scenario_selector = mo.ui.dropdown(
+        options={f.stem.replace("_", " ").title(): str(f) for f in _files},
+        value=_files[0].stem.replace("_", " ").title() if _files else None,
+        label="Price scenario",
     )
-    return get_price_seed, regen_price
+    return (scenario_selector,)
 
 
 @app.cell
@@ -137,37 +129,32 @@ def _(mo):
 
 
 @app.cell
-def _(
-    SimulationParams,
-    generate_price_series,
-    generate_seasonal_prices,
-    get_price_seed,
-):
-    _params = SimulationParams(seed=get_price_seed(), T=360)
-    seasonal = generate_seasonal_prices(_params)
-    prices = generate_price_series(_params)
-    price_params = _params
-    return price_params, prices, seasonal
+def _(pl, scenario_selector):
+    _df = pl.read_csv(scenario_selector.value)
+    prices = _df.get_column("price").to_numpy()
+    seasonal = _df.get_column("seasonal").to_numpy()
+    return prices, seasonal
 
 
 @app.cell
 def _(
+    SimulationParams,
     dataclasses,
     forecast_horizon,
     generate_price_forecast,
     generate_raw_price_forecast,
-    price_params,
     prices,
+    seasonal,
 ):
     _short, _long = forecast_horizon.value
     _fparams = dataclasses.replace(
-        price_params,
+        SimulationParams(T=len(prices)),
         forecast_short_term=_short,
         forecast_long_term=_long,
     )
-    _forecast_matrix = generate_price_forecast(prices, _fparams)
+    _forecast_matrix = generate_price_forecast(prices, _fparams, seasonal_array=seasonal)
     price_forecast = _forecast_matrix[0, :]
-    price_forecast_raw = generate_raw_price_forecast(prices, _fparams)
+    price_forecast_raw = generate_raw_price_forecast(prices, _fparams, seasonal_array=seasonal)
     return price_forecast, price_forecast_raw
 
 
@@ -192,7 +179,7 @@ def _(
     price_forecast,
     price_forecast_raw,
     prices,
-    regen_price,
+    scenario_selector,
     seasonal,
 ):
     _days = np.arange(1, len(prices) + 1)
@@ -238,13 +225,13 @@ def _(
     _fig.update_layout(
         title="Energy Price",
         xaxis_title="Day of year",
-        yaxis_title="£/MWh",
+        yaxis_title="€/MWh",
         height=400,
         margin=dict(t=50, b=40, l=60, r=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
     )
 
-    mo.vstack([regen_price, _fig])
+    mo.vstack([scenario_selector, _fig])
     return
 
 
