@@ -5,19 +5,21 @@ Description: Daily mean temperatures at Görlitz (DWD station 01684), 2015–202
 
 import marimo
 
+__generated_with = "0.19.4"
 app = marimo.App(width="full")
 
 
 @app.cell
 def _():
     import datetime
+    import pathlib
     import marimo as mo
     import numpy as np
     import polars as pl
     import plotly.graph_objects as go
     from src.fourier import fourier_seasonal_fit
     from src.simulation import ar1_fit, ar1_simulate
-    return ar1_fit, ar1_simulate, datetime, fourier_seasonal_fit, go, mo, np, pl
+    return ar1_fit, ar1_simulate, datetime, fourier_seasonal_fit, go, mo, np, pathlib, pl
 
 
 @app.cell
@@ -36,8 +38,7 @@ def _(mo):
 
 
 @app.cell
-def _(pl):
-    import pathlib
+def _(pathlib, pl):
     _data_file = pathlib.Path(__file__).parent.parent / "data" / "goerlitz_daily_weather.txt.gz"
     df_temp = (
         pl.read_csv(
@@ -62,6 +63,18 @@ def _(pl):
     )
     available_temp_years = sorted(df_temp["year"].unique().to_list())
     return available_temp_years, df_temp
+
+
+@app.cell
+def _(pathlib, pl):
+    _dhn_file = pathlib.Path(__file__).parent.parent / "data" / "dhn" / "heatgrids_Sachsen.csv"
+    goerlitz_dh_demand_mwh = float(
+        pl.read_csv(_dhn_file)
+        .filter(pl.col("GEN") == "Görlitz")
+        .select(pl.col("DH_demand").sum())
+        .item()
+    )
+    return (goerlitz_dh_demand_mwh,)
 
 
 @app.cell
@@ -332,6 +345,7 @@ def _(mo):
 
 @app.cell
 def _(ar1_simulate, generate_temp_btn, phi_temp, seasonal_temp, sigma_temp):
+    generate_temp_btn  # re-run on each button press
     _r = ar1_simulate(phi_temp, sigma_temp)
     sim_temp = (seasonal_temp + _r).tolist()
     return (sim_temp,)
@@ -413,6 +427,15 @@ def _(datetime, generate_temp_btn, go, mo, np, seasonal_temp, sigma_stat_temp, s
 
 
 @app.cell
+def _(goerlitz_dh_demand_mwh, np, seasonal_temp):
+    _T_BASE = 20.0
+    _T_LIMIT = 15.0
+    _dd_factors = np.where(seasonal_temp < _T_LIMIT, _T_BASE - seasonal_temp + 4.0, 4.0)
+    k_goerlitz = (goerlitz_dh_demand_mwh * 1_000.0) / float(_dd_factors.sum())
+    return (k_goerlitz,)
+
+
+@app.cell
 def _(mo):
     mo.md(r"""
     ## Heat demand model
@@ -436,16 +459,26 @@ def _(mo):
     | $k$ | adjustable (kW/K) | Aggregate fabric heat-loss coefficient |
     | $P_{\text{base}} = 4\,k$ | kWh/day | Baseload (hot water, always-on) |
 
-    A typical UK semi-detached house has $k \approx 0.15$–$0.25$ kW/K; a
-    neighbourhood of 100 homes is roughly $k = 15$–$25$ kW/K.
+    The slider below is calibrated to the Görlitz district heating network:
+    annual DH demand from the Saxony heatgrid dataset
+    ([RWTH-EBC](https://data.mendeley.com/datasets/k3ry9p944k)) is used to back-calculate
+    $k$ from the seasonal temperature curve.
     """)
     return
 
 
 @app.cell
-def _(mo):
+def _(goerlitz_dh_demand_mwh, k_goerlitz, mo):
+    mo.hstack([
+        mo.stat(f"{goerlitz_dh_demand_mwh:,.0f} MWh/yr", label="Görlitz DH demand"),
+        mo.stat(f"{k_goerlitz:,.0f} kW/K", label="Calibrated k"),
+    ])
+
+
+@app.cell
+def _(k_goerlitz, mo):
     heat_k = mo.ui.slider(
-        start=1, stop=100, step=1, value=20,
+        start=100, stop=50_000, step=100, value=round(k_goerlitz / 100) * 100,
         label="Thermal loss coefficient  k  (kW/K)",
         show_value=True,
     )
@@ -493,3 +526,7 @@ def _(datetime, go, heat_k, mo, sim_temp):
     )
 
     mo.vstack([heat_k, mo.ui.plotly(_fig_demand)])
+
+
+if __name__ == "__main__":
+    app.run()
