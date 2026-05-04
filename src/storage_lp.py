@@ -127,8 +127,21 @@ def solve_perfect_foresight(
 
     u_plus = np.maximum(0.0, np.array(model_vars["u_plus"].value))
     u_minus = np.maximum(0.0, np.array(model_vars["u_minus"].value))
-    # s has H+1 elements; return the H start-of-day SoCs (drop the terminal state)
-    s = np.maximum(0.0, np.array(model_vars["s"].value)[:-1])
+
+    # Interior-point solvers can produce degenerate solutions where both u_plus
+    # and u_minus are positive on the same day. This is never strictly optimal
+    # (it wastes round-trip efficiency), so collapse to the net direction.
+    overlap = np.minimum(u_plus, u_minus)
+    u_plus = u_plus - overlap
+    u_minus = u_minus - overlap
+
+    # Recompute SoC from the cleaned flows (slightly better than LP SoC due to
+    # eliminated round-trip losses).
+    s = np.empty(len(demand))
+    s[0] = storage_params.s0
+    for t in range(len(demand) - 1):
+        s[t + 1] = s[t] + u_plus[t] - u_minus[t] / storage_params.eta
+
     hp_output = np.maximum(0.0, demand + u_plus - u_minus)
     cost = float(np.dot(prices, hp_output) / storage_params.cop)
 
@@ -179,7 +192,16 @@ def solve_single_window(
 
     u_plus = np.maximum(0.0, np.array(model_vars["u_plus"].value))
     u_minus = np.maximum(0.0, np.array(model_vars["u_minus"].value))
-    s = np.maximum(0.0, np.array(model_vars["s"].value)[:-1])
+
+    overlap = np.minimum(u_plus, u_minus)
+    u_plus = u_plus - overlap
+    u_minus = u_minus - overlap
+
+    s = np.empty(len(demand_forecast))
+    s[0] = s_current
+    for t in range(len(demand_forecast) - 1):
+        s[t + 1] = s[t] + u_plus[t] - u_minus[t] / storage_params.eta
+
     hp_output = np.maximum(0.0, demand_forecast + u_plus - u_minus)
     cost = float(np.dot(prices_forecast, hp_output) / storage_params.cop)
 
