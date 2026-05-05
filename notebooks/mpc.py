@@ -101,9 +101,9 @@ def _(mo):
     cop = mo.ui.slider(start=1.0, stop=5.0, step=0.25, value=3.0, label="Heat pump COP", show_value=True)
     h_max = mo.ui.number(start=10, stop=10_000, step=10, value=600, label="Max HP output (MWh/day)")
     mpc_horizon = mo.ui.slider(start=1, stop=90, step=1, value=30, label="MPC horizon H (days)", show_value=True)
-    forecast_horizon = mo.ui.range_slider(
-        start=0, stop=90, value=[7, 30], step=1,
-        label="Forecast horizon: short-term / long-term (days)",
+    blend_horizon = mo.ui.slider(
+        start=1, stop=90, value=30, step=1,
+        label="Blend horizon (days)",
         show_value=True,
     )
 
@@ -113,9 +113,9 @@ def _(mo):
         mo.md("### Heat pump"),
         mo.hstack([eta, cop, h_max], justify="start"),
         mo.md("### MPC"),
-        mo.hstack([mpc_horizon, forecast_horizon], justify="start"),
+        mo.hstack([mpc_horizon, blend_horizon], justify="start"),
     ])
-    return cop, eta, forecast_horizon, h_max, mpc_horizon, s0, s_max, s_min, u_minus_max, u_plus_max
+    return blend_horizon, cop, eta, h_max, mpc_horizon, s0, s_max, s_min, u_minus_max, u_plus_max
 
 
 @app.cell
@@ -123,10 +123,10 @@ def _(
     MPCParams,
     SimulationParams,
     StorageParams,
+    blend_horizon,
     cop,
     dataclasses,
     eta,
-    forecast_horizon,
     h_max,
     heat_scenario_selector,
     mo,
@@ -156,11 +156,9 @@ def _(
         cop=cop.value,
         h_max=h_max.value,
     )
-    _short, _long = forecast_horizon.value
     _sim = dataclasses.replace(
         SimulationParams(T=len(prices)),
-        forecast_short_term=_short,
-        forecast_long_term=_long,
+        blend_horizon=blend_horizon.value,
     )
     _mp = MPCParams(H=mpc_horizon.value)
 

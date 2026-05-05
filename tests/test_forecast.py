@@ -27,33 +27,33 @@ def test_seasonal_winter_peak(test_prices: np.ndarray, test_demand: np.ndarray):
         "Seasonal demand should peak in winter"
 
 
-def test_forecast_matches_true_price_at_short_horizons(test_prices: np.ndarray,
-                                                       test_seasonal_prices: np.ndarray
-                                                       ):
-    """When forecast_short_term covers the full window, the blended forecast
-    should equal the true price (α=1 everywhere, deviation = true deviation)."""
-    T = 50
-    params = SimulationParams(seed=7, T=T, forecast_short_term=T, forecast_long_term=T + 1)
+def test_forecast_zero_noise_matches_linear_blend(
+        test_prices: np.ndarray, test_seasonal_prices: np.ndarray):
+    """With noise_scale=0, E=0 everywhere, so forecast equals the explicit linear blend:
+    forecast[h] = w[h]*P_nominal[h] + (1-w[h])*seasonal[h]."""
+    T, blend = 50, 20
+    params = SimulationParams(seed=7, T=T, noise_scale=0.0, blend_horizon=blend)
     prices = test_prices[:T]
-    seasonal_prices = test_seasonal_prices[:T]
-    forecast = get_forecast_window(0, T, prices, seasonal_prices, params)
-    np.testing.assert_allclose(forecast, prices, rtol=1e-6,
-        err_msg="Forecast should match true prices when short-term horizon covers full window")
+    seasonal = test_seasonal_prices[:T]
+    forecast = get_forecast_window(0, T, prices, seasonal, params)
+
+    h = np.arange(T, dtype=float)
+    w = np.clip(1.0 - h / blend, 0.0, 1.0)
+    expected = w * prices + (1 - w) * seasonal
+    np.testing.assert_allclose(forecast, expected, rtol=1e-6,
+        err_msg="Zero-noise forecast should equal the linear blend of nominal and seasonal")
 
 
-def test_forecast_equals_seasonal_at_long_horizons(test_prices: np.ndarray,
-                                                       test_seasonal_prices: np.ndarray
-                                                       ):
-    """When forecast_long_term=1, α=0 for all h≥1, so the forecast from h=1
-    onward should equal the seasonal average."""
+def test_forecast_equals_seasonal_beyond_blend_horizon(
+        test_prices: np.ndarray, test_seasonal_prices: np.ndarray):
+    """With blend_horizon=1, w=0 for h≥1 so forecast equals seasonal from h=1 onward.
+    At h=0: E[0]=0 and w[0]=1, so forecast[0] = true price[0]."""
     T = 60
-    params = SimulationParams(seed=3, T=T, forecast_short_term=0, forecast_long_term=1)
+    params = SimulationParams(seed=3, T=T, blend_horizon=1)
     prices = test_prices[:T]
     seasonal_prices = test_seasonal_prices[:T]
     forecast = get_forecast_window(0, T, prices, seasonal_prices, params)
 
-    # h=0: α=1 (short-term covers h=0), so forecast[0] = true price[0]
     assert forecast[0] == pytest.approx(prices[0], rel=1e-6)
-    # h≥1: α=0, so forecast should equal seasonal
     np.testing.assert_allclose(forecast[1:], seasonal_prices[1:], rtol=1e-6,
-        err_msg="Forecast should equal seasonal average when long-term horizon is 1")
+        err_msg="Forecast should equal seasonal average when blend_horizon=1")

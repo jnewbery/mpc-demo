@@ -171,54 +171,51 @@ def _(mo):
 
     A forecast made at time $t$ for horizon $h$ is constructed in two steps.
 
-    **Step 1 — forecast deviation random walk.**
-    The forecaster knows the current deviation from the scenario seasonal exactly,
-    then projects it forward with growing uncertainty:
+    **Step 1 — AR(1) error generation.**
+    Starting from zero error at $h=0$ (the current price is known exactly), errors
+    evolve as an AR(1) process:
 
-    $$\hat{d}_0 = P_t - S_t, \qquad \hat{d}_h = \hat{d}_{h-1} + \sigma_\text{step}\, z_h$$
+    $$E_0 = 0, \qquad E_h = \rho\, E_{h-1} + \varepsilon_h, \quad \varepsilon_h \sim \mathcal{N}(0,\,\sigma^2)$$
 
-    where $\sigma_\text{step} = \sigma_\infty / \sqrt{H_\text{long}}$ is calibrated so
-    that forecast uncertainty reaches $\sigma_\infty$ by the long-term horizon $H_\text{long}$.
+    The raw forecast is $F_\text{raw}(h) = P_\text{nominal}(t+h) + E_h$.
 
-    **Step 2 — blend toward the seasonal average.**
+    **Step 2 — linear blend toward the seasonal mean.**
 
-    $$\hat{P}_{t+h} = S_{t+h} + \alpha(h)\,\hat{d}_h$$
+    $$w(h) = \max\!\left(0,\; 1 - \tfrac{h}{H_\text{blend}}\right)$$
 
-    $$\alpha(h) = \begin{cases} 1 & h \le H_\text{short} \\ \tfrac{1}{2}\!\left(1 + \cos\!\left(\pi\,\tfrac{h - H_\text{short}}{H_\text{long} - H_\text{short}}\right)\right) & H_\text{short} < h < H_\text{long} \\ 0 & h \ge H_\text{long} \end{cases}$$
+    $$F_\text{final}(h) = w(h)\cdot F_\text{raw}(h) + \bigl(1 - w(h)\bigr)\cdot S_{t+h}$$
 
-    For $h \le H_\text{short}$ the forecast closely tracks the true price. For
-    $h \ge H_\text{long}$ the weight is zero and the forecast converges to $S_t$.
-    The slider below controls $H_\text{short}$ and $H_\text{long}$.
+    At $h=0$ the forecast equals the true price; by $h = H_\text{blend}$ it has
+    fully reverted to the seasonal mean $S$.
+    The slider below controls $H_\text{blend}$.
     """)
     return
 
 
 @app.cell
 def _(mo):
-    forecast_horizon = mo.ui.range_slider(
-        start=0, stop=90, value=[7, 30], step=1,
-        label="Forecast horizon: short-term / long-term (days)",
+    blend_horizon = mo.ui.slider(
+        start=1, stop=90, value=30, step=1,
+        label="Blend horizon (days)",
         show_value=True,
     )
-    forecast_horizon
-    return (forecast_horizon,)
+    blend_horizon
+    return (blend_horizon,)
 
 
 @app.cell
 def _(
     SimulationParams,
+    blend_horizon,
     dataclasses,
-    forecast_horizon,
     generate_price_forecast,
     generate_raw_price_forecast,
     prices,
     seasonal_price,
 ):
-    _short, _long = forecast_horizon.value
     _fparams = dataclasses.replace(
         SimulationParams(T=len(prices)),
-        forecast_short_term=_short,
-        forecast_long_term=_long,
+        blend_horizon=blend_horizon.value,
     )
     _forecast_matrix = generate_price_forecast(prices, _fparams, seasonal_prices=seasonal_price)
     price_forecast = _forecast_matrix[0, :]
