@@ -16,8 +16,8 @@ def _():
     import numpy as np
     import polars as pl
     import plotly.graph_objects as go
+    from src.autoregression import ar1_fit, ar1_simulate
     from src.fourier import fourier_seasonal_fit
-    from src.simulation import ar1_fit, ar1_simulate
     return ar1_fit, ar1_simulate, datetime, fourier_seasonal_fit, go, mo, np, pl
 
 

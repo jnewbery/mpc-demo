@@ -11,9 +11,9 @@ import sys
 import numpy as np
 import polars as pl
 
+from src.autoregression import ar1_fit, ar1_simulate
 from src.fourier import fourier_seasonal_fit
 from src.heat_demand import calibrate, compute_demand
-from src.simulation import ar1_fit, ar1_simulate
 
 _REPO_ROOT = pathlib.Path(__file__).parent.parent
 _TEMP_FILE = _REPO_ROOT / "data" / "goerlitz_daily_weather.txt.gz"

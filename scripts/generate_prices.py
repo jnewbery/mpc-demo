@@ -11,8 +11,8 @@ import sys
 import numpy as np
 import polars as pl
 
+from src.autoregression import ar1_fit, ar1_simulate
 from src.fourier import fourier_seasonal_fit
-from src.simulation import ar1_fit, ar1_simulate
 
 _REPO_ROOT = pathlib.Path(__file__).parent.parent
 _DATA_FILE = _REPO_ROOT / "data" / "day_ahead_prices.csv"
