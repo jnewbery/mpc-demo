@@ -34,58 +34,6 @@ class SimulationParams:
     seed: int = 42
 
 
-def generate_seasonal_prices(params: SimulationParams) -> np.ndarray:
-    """Generate the smooth seasonal price baseline (no noise).
-
-    Returns
-    -------
-    np.ndarray of shape (T,), seasonal prices in £/MWh.
-    """
-    t = np.arange(params.T)
-    return params.price_mean + params.price_seasonal_amp * np.cos(
-        2 * np.pi * t / 365
-    )
-
-
-def generate_seasonal_demand(params: SimulationParams) -> np.ndarray:
-    """Generate the seasonal demand baseline including the weekend multiplier (no noise).
-
-    Returns
-    -------
-    np.ndarray of shape (T,), seasonal demand in MWh/day.
-    """
-    t = np.arange(params.T)
-    seasonal = params.demand_mean + params.demand_seasonal_amp * np.cos(
-        2 * np.pi * t / 365
-    )
-    day_of_week = t % 7
-    weekend_mask = (day_of_week == 5) | (day_of_week == 6)
-    multiplier = np.where(weekend_mask, params.demand_weekend_factor, 1.0)
-    return seasonal * multiplier
-
-
-def generate_price_series(params: SimulationParams) -> np.ndarray:
-    """Generate a daily energy price series: seasonal baseline + AR(1) noise.
-
-    t=0 is 1 Jan, so cos() peaks at t=0 → highest prices in winter.
-
-    Returns
-    -------
-    np.ndarray of shape (T,), prices in £/MWh, clipped to a minimum of 0.0.
-    """
-    rng = np.random.default_rng(params.seed)
-    seasonal = generate_seasonal_prices(params)
-
-    # AR(1) noise: ε[t] = φ·ε[t-1] + σ·z[t]
-    innovations = rng.standard_normal(params.T) * params.price_ar1_sigma
-    noise = np.zeros(params.T)
-    for i in range(1, params.T):
-        noise[i] = params.price_ar1_phi * noise[i - 1] + innovations[i]
-
-    prices = np.maximum(0.0, seasonal + noise)
-    return prices
-
-
 def generate_demand_series(params: SimulationParams) -> np.ndarray:
     """Generate a daily heat demand series with seasonal and weekly patterns.
 

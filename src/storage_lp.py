@@ -135,12 +135,13 @@ def solve_perfect_foresight(
     u_plus = u_plus - overlap
     u_minus = u_minus - overlap
 
-    # Recompute SoC from the cleaned flows (slightly better than LP SoC due to
-    # eliminated round-trip losses).
-    s = np.empty(len(demand))
-    s[0] = storage_params.s0
-    for t in range(len(demand) - 1):
-        s[t + 1] = s[t] + u_plus[t] - u_minus[t] / storage_params.eta
+    # Use the LP's own SoC variable rather than recomputing from cleaned flows.
+    # Recomputing would inflate SoC above s_max because removing the overlap
+    # reduces discharge losses (saving overlap*(1/η−1) of stored energy).
+    s = np.clip(
+        np.array(model_vars["s"].value)[:len(demand)],
+        storage_params.s_min, storage_params.s_max,
+    )
 
     hp_output = np.maximum(0.0, demand + u_plus - u_minus)
     cost = float(np.dot(prices, hp_output) / storage_params.cop)
@@ -197,10 +198,10 @@ def solve_single_window(
     u_plus = u_plus - overlap
     u_minus = u_minus - overlap
 
-    s = np.empty(len(demand_forecast))
-    s[0] = s_current
-    for t in range(len(demand_forecast) - 1):
-        s[t + 1] = s[t] + u_plus[t] - u_minus[t] / storage_params.eta
+    s = np.clip(
+        np.array(model_vars["s"].value)[:len(demand_forecast)],
+        storage_params.s_min, storage_params.s_max,
+    )
 
     hp_output = np.maximum(0.0, demand_forecast + u_plus - u_minus)
     cost = float(np.dot(prices_forecast, hp_output) / storage_params.cop)

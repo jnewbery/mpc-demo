@@ -1,22 +1,32 @@
+import pathlib
 import numpy as np
 import pytest
 
-from src.simulation import SimulationParams, generate_price_series, generate_demand_series, generate_seasonal_prices
+from src.simulation import SimulationParams, generate_demand_series
 from src.storage_lp import StorageParams, solve_perfect_foresight, solve_single_window
 from src.mpc import MPCParams, run_mpc
+
+_DATA_DIR = pathlib.Path(__file__).parent.parent / "data"
+
+
+def _prices(rows: int | None = None) -> np.ndarray:
+    arr = np.genfromtxt(
+        _DATA_DIR / "price_scenarios" / "scenario_1.csv",
+        delimiter=",", skip_header=1, usecols=(2,),
+    )
+    return arr if rows is None else arr[:rows]
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _default_pf(seed=42, T=365):
-    sim = SimulationParams(seed=seed, T=T)
-    prices = generate_price_series(sim)
-    demand = generate_demand_series(sim)
+def _default_pf():
+    prices = _prices()
+    demand = generate_demand_series(SimulationParams(T=365))
     sp = StorageParams()
     result = solve_perfect_foresight(prices, demand, sp)
-    return result, prices, demand, sp, sim
+    return result, prices, demand, sp
 
 
 # ---------------------------------------------------------------------------
@@ -29,32 +39,32 @@ def test_pf_status_optimal():
 
 
 def test_pf_soc_bounds():
-    result, _, _, sp, _ = _default_pf()
+    result, _, _, sp = _default_pf()
     assert np.all(result["soc"] >= sp.s_min - 1e-5)
     assert np.all(result["soc"] <= sp.s_max + 1e-5)
 
 
 def test_pf_charge_bounds():
-    result, _, _, sp, _ = _default_pf()
+    result, _, _, sp = _default_pf()
     assert np.all(result["charge"] >= -1e-6)
     assert np.all(result["charge"] <= sp.u_plus_max + 1e-5)
 
 
 def test_pf_discharge_bounds():
-    result, _, _, sp, _ = _default_pf()
+    result, _, _, sp = _default_pf()
     assert np.all(result["discharge"] >= -1e-6)
     assert np.all(result["discharge"] <= sp.u_minus_max + 1e-5)
 
 
 def test_pf_hp_output_bounds():
-    result, _, _, sp, _ = _default_pf()
+    result, _, _, sp = _default_pf()
     assert np.all(result["hp_output"] >= -1e-5)
     assert np.all(result["hp_output"] <= sp.h_max + 1e-5)
 
 
 def test_pf_cost_below_baseline():
     """Perfect foresight cost must not exceed the no-storage baseline."""
-    result, prices, demand, sp, _ = _default_pf()
+    result, prices, demand, sp = _default_pf()
     baseline = float(np.dot(prices, demand) / sp.cop)
     assert result["cost"] <= baseline + 1e-3
 
@@ -121,8 +131,8 @@ def test_pf_2step_no_benefit():
 
 def test_mpc_cost_at_least_pf():
     """MPC cost must be >= perfect foresight cost (PF is optimal with full information)."""
-    sim = SimulationParams(seed=42, T=365)
-    prices = generate_price_series(sim)
+    sim = SimulationParams(T=365)
+    prices = _prices()
     demand = generate_demand_series(sim)
     sp = StorageParams()
     mp = MPCParams(H=30)
@@ -134,8 +144,8 @@ def test_mpc_cost_at_least_pf():
 
 
 def test_mpc_soc_bounds():
-    sim = SimulationParams(seed=42, T=365)
-    prices = generate_price_series(sim)
+    sim = SimulationParams(T=365)
+    prices = _prices()
     demand = generate_demand_series(sim)
     sp = StorageParams()
     mpc = run_mpc(prices, demand, sp, MPCParams(H=30), sim)
@@ -145,8 +155,8 @@ def test_mpc_soc_bounds():
 
 
 def test_mpc_hp_output_bounds():
-    sim = SimulationParams(seed=42, T=365)
-    prices = generate_price_series(sim)
+    sim = SimulationParams(T=365)
+    prices = _prices()
     demand = generate_demand_series(sim)
     sp = StorageParams()
     mpc = run_mpc(prices, demand, sp, MPCParams(H=30), sim)
@@ -158,7 +168,7 @@ def test_mpc_hp_output_bounds():
 def test_mpc_short_horizon_still_feasible():
     """A horizon of H=1 (myopic) should still complete without fallbacks."""
     sim = SimulationParams(seed=5, T=60)
-    prices = generate_price_series(sim)
+    prices = _prices(rows=60)
     demand = generate_demand_series(sim)
     sp = StorageParams()
     mpc = run_mpc(prices, demand, sp, MPCParams(H=1), sim)
@@ -173,7 +183,7 @@ def test_single_window_matches_pf_on_full_horizon():
     """solve_single_window over the full horizon from s0 should give the same
     cost as solve_perfect_foresight."""
     sim = SimulationParams(seed=1, T=30)
-    prices = generate_price_series(sim)
+    prices = _prices(rows=30)
     demand = generate_demand_series(sim)
     sp = StorageParams()
 
@@ -193,9 +203,12 @@ def test_pf_no_simultaneous_charge_discharge():
 def test_mpc_with_seasonal_prices():
     """run_mpc with an explicit seasonal_prices array should complete without fallbacks."""
     sim = SimulationParams(seed=42, T=90)
-    prices = generate_price_series(sim)
+    prices = _prices(rows=90)
     demand = generate_demand_series(sim)
-    seasonal = generate_seasonal_prices(sim)
+    seasonal = np.genfromtxt(
+        _DATA_DIR / "price_scenarios" / "scenario_1.csv",
+        delimiter=",", skip_header=1, usecols=(1,),  # 'seasonal' column
+    )[:90]
     sp = StorageParams()
     mpc = run_mpc(prices, demand, sp, MPCParams(H=14), sim, seasonal_prices=seasonal)
 
