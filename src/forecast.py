@@ -96,14 +96,33 @@ def generate_price_forecast(
     return forecast
 
 
+def get_raw_forecast_window(
+    t: int,
+    true_prices: np.ndarray,
+    params: SimulationParams,
+) -> np.ndarray:
+    """Return the unblended AR(1) forecast from time t to the end of true_prices.
+
+    Uses the same RNG seed as get_forecast_window so both share the same error
+    realisation — the raw and blended traces are directly comparable.
+
+    Returns
+    -------
+    np.ndarray of shape (len(true_prices) - t,)
+    """
+    H = len(true_prices) - t
+    rng = np.random.default_rng(params.seed + 2 + t)
+    E = _ar1_errors(H, params.price_ar1_phi, params.noise_scale, rng)
+    return true_prices[t:] + E
+
+
 def get_forecast_window(
     t: int,
-    H: int,
     true_prices: np.ndarray,
     seasonal_prices: np.ndarray,
     params: SimulationParams,
 ) -> np.ndarray:
-    """Return a blended forecast window of length H starting at time t.
+    """Return the blended forecast from time t to the end of true_prices.
 
     Steps:
       1. Generate AR(1) errors E[0..H-1] seeded per timestep (E[0]=0).
@@ -114,20 +133,18 @@ def get_forecast_window(
     Parameters
     ----------
     t               : current time step
-    H               : forecast window length
     true_prices     : np.ndarray of shape (T,)
     seasonal_prices : seasonal baseline of shape (N,); indexed modulo N
     params          : SimulationParams
 
     Returns
     -------
-    np.ndarray of shape (H,)
+    np.ndarray of shape (len(true_prices) - t,)
     """
+    H = len(true_prices) - t
     rng = np.random.default_rng(params.seed + 2 + t)
     E = _ar1_errors(H, params.price_ar1_phi, params.noise_scale, rng)
     w = _linear_weights(H, params.blend_horizon)
     horizons = np.arange(H)
-    T_full    = len(true_prices)
-    P_nominal = true_prices[np.minimum(t + horizons, T_full - 1)]
-    P_mean    = seasonal_prices[(t + horizons) % len(seasonal_prices)]
-    return w * (P_nominal + E) + (1 - w) * P_mean
+    P_mean = seasonal_prices[(t + horizons) % len(seasonal_prices)]
+    return w * (true_prices[t:] + E) + (1 - w) * P_mean

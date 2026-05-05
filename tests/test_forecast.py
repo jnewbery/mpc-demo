@@ -35,7 +35,7 @@ def test_forecast_zero_noise_matches_linear_blend(
     params = SimulationParams(seed=7, T=T, noise_scale=0.0, blend_horizon=blend)
     prices = test_prices[:T]
     seasonal = test_seasonal_prices[:T]
-    forecast = get_forecast_window(0, T, prices, seasonal, params)
+    forecast = get_forecast_window(0, prices, seasonal, params)
 
     h = np.arange(T, dtype=float)
     w = np.clip(1.0 - h / blend, 0.0, 1.0)
@@ -52,7 +52,7 @@ def test_forecast_equals_seasonal_beyond_blend_horizon(
     params = SimulationParams(seed=3, T=T, blend_horizon=1)
     prices = test_prices[:T]
     seasonal_prices = test_seasonal_prices[:T]
-    forecast = get_forecast_window(0, T, prices, seasonal_prices, params)
+    forecast = get_forecast_window(0, prices, seasonal_prices, params)
 
     assert forecast[0] == pytest.approx(prices[0], rel=1e-6)
     np.testing.assert_allclose(forecast[1:], seasonal_prices[1:], rtol=1e-6,

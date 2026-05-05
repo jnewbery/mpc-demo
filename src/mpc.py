@@ -78,7 +78,7 @@ def run_mpc(
     for t in range(T):
         H_window = min(mpc_params.H, T - t)
 
-        price_fc = get_forecast_window(t, H_window, true_prices, seasonal_prices, sim_params)
+        price_fc = get_forecast_window(t, true_prices, seasonal_prices, sim_params)[:H_window]
         demand_fc = true_demand[t : t + H_window]
 
         try:

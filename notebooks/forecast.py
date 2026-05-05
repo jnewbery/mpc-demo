@@ -21,16 +21,16 @@ def _():
 
     from src.forecast import (
         SimulationParams,
-        generate_price_forecast,
-        generate_raw_price_forecast,
+        get_forecast_window,
+        get_raw_forecast_window,
     )
 
     return (
         SimulationParams,
         dataclasses,
         datetime,
-        generate_price_forecast,
-        generate_raw_price_forecast,
+        get_forecast_window,
+        get_raw_forecast_window,
         go,
         mo,
         np,
@@ -99,7 +99,15 @@ def _(heat_scenario_selector, pl):
 
 
 @app.cell
-def _(datetime, go, heat_demand, mo, prices, seasonal_heat_demand, seasonal_price):
+def _(
+    datetime,
+    go,
+    heat_demand,
+    mo,
+    prices,
+    seasonal_heat_demand,
+    seasonal_price,
+):
     _tick_months = [datetime.date(2001, m, 1) for m in range(1, 13)]
     _tick_doys = [d.timetuple().tm_yday for d in _tick_months]
     _tick_labels = [d.strftime("%b") for d in _tick_months]
@@ -162,6 +170,7 @@ def _(datetime, go, heat_demand, mo, prices, seasonal_heat_demand, seasonal_pric
         height=500,
     )
     mo.ui.plotly(_fig)
+    return
 
 
 @app.cell
@@ -199,61 +208,91 @@ def _(mo):
         label="Blend horizon (days)",
         show_value=True,
     )
-    blend_horizon
-    return (blend_horizon,)
+    controller_day = mo.ui.slider(
+        start=1, stop=365, value=1, step=1,
+        label="Controller day of year",
+        show_value=True,
+    )
+    mo.hstack([controller_day, blend_horizon], justify="start")
+    return blend_horizon, controller_day
 
 
 @app.cell
 def _(
     SimulationParams,
     blend_horizon,
+    controller_day,
     dataclasses,
-    generate_price_forecast,
-    generate_raw_price_forecast,
+    get_forecast_window,
+    get_raw_forecast_window,
     prices,
     seasonal_price,
 ):
+    _t = controller_day.value - 1
+    _H = blend_horizon.value
     _fparams = dataclasses.replace(
         SimulationParams(T=len(prices)),
-        blend_horizon=blend_horizon.value,
+        blend_horizon=_H,
     )
-    _forecast_matrix = generate_price_forecast(prices, _fparams, seasonal_prices=seasonal_price)
-    price_forecast = _forecast_matrix[0, :]
-    price_forecast_raw = generate_raw_price_forecast(prices, _fparams, seasonal_prices=seasonal_price)
+    price_forecast = get_forecast_window(_t, prices, seasonal_price, _fparams)
+    price_forecast_raw = get_raw_forecast_window(_t, prices, _fparams)
     return price_forecast, price_forecast_raw
 
 
 @app.cell
-def _(datetime, go, mo, np, price_forecast, price_forecast_raw, prices, seasonal_price):
+def _(
+    blend_horizon,
+    controller_day,
+    datetime,
+    go,
+    np,
+    price_forecast,
+    price_forecast_raw,
+    prices,
+    seasonal_price,
+):
+    _t = controller_day.value - 1
+    _H = blend_horizon.value
+
     _tick_months = [datetime.date(2001, m, 1) for m in range(1, 13)]
     _tick_doys = [d.timetuple().tm_yday for d in _tick_months]
     _tick_labels = [d.strftime("%b") for d in _tick_months]
 
-    _days = np.arange(1, len(prices) + 1)
+    # Clip forecast so it doesn't extend past day 365
+    _H_clip  = min(_H, len(prices) - _t)
+    _raw_fc_days = np.arange(_t + 1, _t + _H_clip + 1)  # controller_day … min(controller_day+H-1, 365)
+    _blended_fc_days = np.arange(_t + 1, len(prices) + 1)  # controller_day … 365 (blended forecast extends to end of year)
+
     _fig2 = go.Figure()
 
     _fig2.add_trace(go.Scatter(
-        x=_days, y=seasonal_price,
+        x=np.arange(1, len(prices) + 1), y=seasonal_price,
         mode="lines", name="Seasonal average",
         line=dict(color="#4a90d9", width=1.5, dash="dash"),
         hovertemplate="Day %{x}<br>%{y:.1f} €/MWh<extra></extra>",
     ))
     _fig2.add_trace(go.Scatter(
-        x=_days, y=price_forecast_raw,
+        x=np.arange(_t + 1, len(prices) + 1), y=prices[_t:],
+        mode="lines", name="True price",
+        line=dict(color="#e07b39", width=1.5),
+        hovertemplate="Day %{x}<br>%{y:.1f} €/MWh<extra></extra>",
+    ))
+    _fig2.add_trace(go.Scatter(
+        x=_raw_fc_days, y=price_forecast_raw[:_H_clip],
         mode="lines", name="Raw forecast (unblended)",
         line=dict(color="grey", width=1, dash="dot"),
         hovertemplate="Day %{x}<br>%{y:.1f} €/MWh<extra></extra>",
     ))
     _fig2.add_trace(go.Scatter(
-        x=_days, y=price_forecast,
+        x=_blended_fc_days, y=price_forecast,
         mode="lines", name="Forecast",
         line=dict(color="black", width=1.5),
         hovertemplate="Day %{x}<br>%{y:.1f} €/MWh<extra></extra>",
     ))
     _fig2.add_trace(go.Scatter(
-        x=_days, y=prices,
-        mode="lines", name="True price",
-        line=dict(color="#e07b39", width=1.5),
+        x=np.arange(1, _t + 1), y=prices,
+        mode="lines", name="Historic",
+        line=dict(color="black", width=1.5),
         hovertemplate="Day %{x}<br>%{y:.1f} €/MWh<extra></extra>",
     ))
 
@@ -265,7 +304,7 @@ def _(datetime, go, mo, np, price_forecast, price_forecast_raw, prices, seasonal
             showgrid=True, gridcolor="#e5e5e5",
             domain=[0.05, 0.95],
         ),
-        yaxis=dict(title="€/MWh", showgrid=True, gridcolor="#e5e5e5"),
+        yaxis=dict(title="€/MWh", showgrid=True, gridcolor="#e5e5e5", range=[0, max(prices) * 1.1]),
         plot_bgcolor="white",
         hovermode="x unified",
         legend=dict(orientation="h", yanchor="bottom", y=0.98, xanchor="left", x=0),
@@ -273,6 +312,7 @@ def _(datetime, go, mo, np, price_forecast, price_forecast_raw, prices, seasonal
         height=450,
     )
     mo.ui.plotly(_fig2)
+    return
 
 
 if __name__ == "__main__":
