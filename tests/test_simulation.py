@@ -18,6 +18,13 @@ def _prices(scenario: int = 1, rows: int | None = None) -> np.ndarray:
     )
     return arr if rows is None else arr[:rows]
 
+def _seasonal_prices(scenario: int = 1, rows: int | None = None) -> np.ndarray:
+    arr = np.genfromtxt(
+        _DATA_DIR / "price_scenarios" / f"scenario_{scenario}.csv",
+        delimiter=",", skip_header=1, usecols=(1,),  # 'seasonal' column
+    )
+    return arr if rows is None else arr[:rows]
+
 
 def test_prices_non_negative():
     assert np.all(_prices() >= 0), "Prices contain negative values"
@@ -90,7 +97,7 @@ def test_forecast_window_with_explicit_seasonal_array():
     T = 60
     params = SimulationParams(seed=10, T=T)
     prices = _prices(rows=T)
-    seasonal = np.full(T, params.price_mean + 10.0)
+    seasonal = _seasonal_prices(rows=T)
     fc_explicit = get_forecast_window(0, 30, prices, params, seasonal_array=seasonal)
     fc_default = get_forecast_window(0, 30, prices, params)
     assert not np.allclose(fc_explicit, fc_default), \
