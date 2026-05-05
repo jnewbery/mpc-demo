@@ -23,6 +23,7 @@ dependencies = [
 edit = "marimo edit notebooks"
 run = "server.py"
 deploy = "scripts/deploy.sh"
+test = "pytest tests/"
 
 [dependency-groups]
 dev = [
