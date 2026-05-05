@@ -37,65 +37,6 @@ def _linear_weights(H: int, blend_horizon: int) -> np.ndarray:
     return np.clip(1.0 - np.arange(H, dtype=float) / blend_horizon, 0.0, 1.0)
 
 
-def generate_raw_price_forecast(
-    true_prices: np.ndarray,
-    params: SimulationParams,
-    seasonal_prices: np.ndarray,
-) -> np.ndarray:
-    """Return the unblended AR(1) forecast from t=0 over the full horizon.
-
-    F_raw[h] = true_prices[h] + E[h], where E is an AR(1) error chain.
-    No mean-reversion blending is applied; this shows the raw noisy forecast.
-
-    Returns
-    -------
-    np.ndarray of shape (T,)
-    """
-    T = len(true_prices)
-    rng = np.random.default_rng(params.seed + 2)
-    E = _ar1_errors(T, params.price_ar1_phi, params.noise_scale, rng)
-    return true_prices + E
-
-
-def generate_price_forecast(
-    true_prices: np.ndarray,
-    params: SimulationParams,
-    seasonal_prices: np.ndarray,
-) -> np.ndarray:
-    """Generate a blended forecast matrix using AR(1) errors + linear mean reversion.
-
-    At each time t:
-      F_raw[h]   = true_prices[t+h] + E[h]           (AR(1) errors from h=0)
-      F_final[h] = w[h] * F_raw[h] + (1-w[h]) * S[t+h]   (blend toward seasonal)
-
-    where w[h] decays linearly from 1 at h=0 to 0 at h=blend_horizon.
-
-    Parameters
-    ----------
-    true_prices    : np.ndarray of shape (T,)
-    params         : SimulationParams
-    seasonal_prices: shape-(N,) seasonal reference; indexed modulo N
-
-    Returns
-    -------
-    forecast : np.ndarray of shape (T, T)
-        forecast[t, h] is the blended price prediction for day t+h, made at day t.
-    """
-    T = len(true_prices)
-    w = _linear_weights(T, params.blend_horizon)
-    horizons = np.arange(T)
-
-    forecast = np.zeros((T, T))
-    for t in range(T):
-        rng = np.random.default_rng(params.seed + 2 + t)
-        E = _ar1_errors(T, params.price_ar1_phi, params.noise_scale, rng)
-        P_nominal = true_prices[np.minimum(t + horizons, T - 1)]
-        P_mean    = seasonal_prices[(t + horizons) % len(seasonal_prices)]
-        forecast[t, :] = w * (P_nominal + E) + (1 - w) * P_mean
-
-    return forecast
-
-
 def get_raw_forecast_window(
     t: int,
     true_prices: np.ndarray,
