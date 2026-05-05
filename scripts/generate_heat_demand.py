@@ -166,6 +166,7 @@ def main() -> None:
 
     # Generate and save scenarios
     days_col = list(range(1, 366))
+    seasonal_heat_demand = compute_demand(seasonal, k, p_base).tolist()
     for i in range(1, scenarios + 1):
         r = ar1_simulate(phi, sigma)
         sim_temps = (seasonal + r).tolist()
@@ -173,8 +174,8 @@ def main() -> None:
         out_path = pathlib.Path(f"{output}_{i}.csv")
         with out_path.open("w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["day_of_year", "seasonal_temp", "temperature", "heat_demand"])
-            writer.writerows(zip(days_col, seasonal.tolist(), sim_temps, heat_demand))
+            writer.writerow(["day_of_year", "seasonal_temp", "temperature", "seasonal_heat_demand", "heat_demand"])
+            writer.writerows(zip(days_col, seasonal.tolist(), sim_temps, seasonal_heat_demand, heat_demand))
         print(f"Wrote {out_path}")
 
 
