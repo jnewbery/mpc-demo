@@ -22,12 +22,6 @@ class SimulationParams:
     price_seasonal_amp: float = 30.0    # winter premium amplitude (£/MWh)
     price_ar1_phi: float = 0.85         # AR(1) autocorrelation coefficient
     price_ar1_sigma: float = 8.0        # AR(1) innovation std dev (£/MWh)
-    # Demand parameters
-    demand_mean: float = 50.0           # MWh/day annual mean heat demand
-    demand_seasonal_amp: float = 25.0   # winter peak amplitude (MWh/day)
-    demand_weekend_factor: float = 0.80 # weekend demand relative to weekday
-    demand_ar1_phi: float = 0.90        # AR(1) autocorrelation (weather persistence)
-    demand_noise_sigma: float = 5.0     # AR(1) innovation std dev (MWh/day)
     # Forecast parameters
     forecast_short_term: int = 7        # days: forecast matches true price exactly
     forecast_long_term: int = 30        # days: forecast equals seasonal average
