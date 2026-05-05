@@ -94,11 +94,12 @@ def _(pl, price_scenario_selector):
 def _(heat_scenario_selector, pl):
     _df = pl.read_csv(heat_scenario_selector.value)
     heat_demand = _df.get_column("heat_demand").to_numpy()
-    return (heat_demand,)
+    seasonal_heat_demand = _df.get_column("seasonal_heat_demand").to_numpy()
+    return heat_demand, seasonal_heat_demand
 
 
 @app.cell
-def _(datetime, go, heat_demand, mo, prices, seasonal_price):
+def _(datetime, go, heat_demand, mo, prices, seasonal_heat_demand, seasonal_price):
     _tick_months = [datetime.date(2001, m, 1) for m in range(1, 13)]
     _tick_doys = [d.timetuple().tm_yday for d in _tick_months]
     _tick_labels = [d.strftime("%b") for d in _tick_months]
@@ -122,6 +123,13 @@ def _(datetime, go, heat_demand, mo, prices, seasonal_price):
         line=dict(color=_blue, width=1.5),
         yaxis="y1",
         hovertemplate="Day %{x}<br>%{y:.1f} €/MWh<extra></extra>",
+    ))
+    _fig.add_trace(go.Scatter(
+        x=_x, y=seasonal_heat_demand.tolist(),
+        mode="lines", name="Seasonal heat demand",
+        line=dict(color=_red, width=1.5, dash="dash"),
+        yaxis="y2",
+        hovertemplate="Day %{x}<br>%{y:.1f} MWh<extra></extra>",
     ))
     _fig.add_trace(go.Scatter(
         x=_x, y=heat_demand.tolist(),
