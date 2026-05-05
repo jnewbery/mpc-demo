@@ -58,7 +58,7 @@ def _forecast_deviation(
     H: int,
     params: SimulationParams,
     rng: np.random.Generator,
-    seasonal_array: np.ndarray,
+    seasonal_prices: np.ndarray,
 ) -> np.ndarray:
     """Generate a forward forecast deviation series from time t over H steps.
 
@@ -79,7 +79,7 @@ def _forecast_deviation(
     dev = np.empty(H)
     for h in range(H_short + 1):
         idx = min(t + h, T_full - 1)
-        dev[h] = true_prices[idx] - float(seasonal_array[(t + h) % len(seasonal_array)])
+        dev[h] = true_prices[idx] - float(seasonal_prices[(t + h) % len(seasonal_prices)])
     for h in range(H_short + 1, H):
         dev[h] = dev[h - 1] + rng.standard_normal() * sigma_step
     return dev
@@ -88,7 +88,7 @@ def _forecast_deviation(
 def generate_raw_price_forecast(
     true_prices: np.ndarray,
     params: SimulationParams,
-    seasonal_array: np.ndarray,
+    seasonal_prices: np.ndarray,
 ) -> np.ndarray:
     """Return the unblended (α=1) forecast from t=0 for all horizons.
 
@@ -103,15 +103,15 @@ def generate_raw_price_forecast(
     """
     T = len(true_prices)
     rng = np.random.default_rng(params.seed + 2)
-    dev = _forecast_deviation(0, true_prices, T, params, rng, seasonal_array)
-    s = seasonal_array[np.arange(T) % len(seasonal_array)]
+    dev = _forecast_deviation(0, true_prices, T, params, rng, seasonal_prices)
+    s = seasonal_prices[np.arange(T) % len(seasonal_prices)]
     return s + dev
 
 
 def generate_price_forecast(
     true_prices: np.ndarray,
     params: SimulationParams,
-    seasonal_array: np.ndarray,
+    seasonal_prices: np.ndarray,
 ) -> np.ndarray:
     """Generate a forecast matrix using a blended random-walk model.
 
@@ -127,7 +127,7 @@ def generate_price_forecast(
     ----------
     true_prices : np.ndarray of shape (T,)
     params : SimulationParams
-    seasonal_array : shape-(N,) seasonal reference; indexed modulo N for horizons beyond N
+    seasonal_prices : shape-(N,) seasonal reference; indexed modulo N for horizons beyond N
 
     Returns
     -------
@@ -141,8 +141,8 @@ def generate_price_forecast(
 
     forecast = np.zeros((T, T))
     for t in range(T):
-        dev = _forecast_deviation(t, true_prices, T, params, rng, seasonal_array)
-        s = seasonal_array[(t + horizons) % len(seasonal_array)]
+        dev = _forecast_deviation(t, true_prices, T, params, rng, seasonal_prices)
+        s = seasonal_prices[(t + horizons) % len(seasonal_prices)]
         forecast[t, :] = s + alpha * dev
 
     return forecast
@@ -152,8 +152,8 @@ def get_forecast_window(
     t: int,
     H: int,
     true_prices: np.ndarray,
+    seasonal_prices: np.ndarray,
     params: SimulationParams,
-    seasonal_array: np.ndarray,
 ) -> np.ndarray:
     """Return a 1-D blended forecast window of length H starting at time t.
 
@@ -166,15 +166,15 @@ def get_forecast_window(
     H : int — MPC horizon length
     true_prices : np.ndarray of shape (T,)
     params : SimulationParams
-    seasonal_array : pre-computed seasonal baseline of shape (T,);
+    seasonal_prices : pre-computed seasonal baseline of shape (T,);
 
     Returns
     -------
     np.ndarray of shape (H,)
     """
     rng = np.random.default_rng(params.seed + 2 + t)
-    dev = _forecast_deviation(t, true_prices, H, params, rng, seasonal_array)
+    dev = _forecast_deviation(t, true_prices, H, params, rng, seasonal_prices)
     horizons = np.arange(H)
     alpha = _forecast_alpha(horizons, params)
-    s = seasonal_array[(t + horizons) % len(seasonal_array)]
+    s = seasonal_prices[(t + horizons) % len(seasonal_prices)]
     return s + alpha * dev

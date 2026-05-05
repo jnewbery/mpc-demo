@@ -5,7 +5,6 @@ import pytest
 from src.simulation import (
     SimulationParams,
     get_forecast_window,
-    _seasonal_at,
 )
 
 _DATA_DIR = pathlib.Path(__file__).parent.parent / "data"
@@ -63,7 +62,7 @@ def test_forecast_matches_true_price_at_short_horizons():
     params = SimulationParams(seed=7, T=T, forecast_short_term=T, forecast_long_term=T + 1)
     prices = _prices(rows=T)
     seasonal_prices = _seasonal_prices(rows=T)
-    forecast = get_forecast_window(0, T, prices, params, seasonal_array=seasonal_prices)
+    forecast = get_forecast_window(0, T, prices, seasonal_prices, params)
     np.testing.assert_allclose(forecast, prices, rtol=1e-6,
         err_msg="Forecast should match true prices when short-term horizon covers full window")
 
@@ -75,7 +74,7 @@ def test_forecast_equals_seasonal_at_long_horizons():
     params = SimulationParams(seed=3, T=T, forecast_short_term=0, forecast_long_term=1)
     prices = _prices(rows=T)
     seasonal_prices = _seasonal_prices(rows=T)
-    forecast = get_forecast_window(0, T, prices, params, seasonal_array=seasonal_prices)
+    forecast = get_forecast_window(0, T, prices, seasonal_prices, params)
 
     # h=0: α=1 (short-term covers h=0), so forecast[0] = true price[0]
     assert forecast[0] == pytest.approx(prices[0], rel=1e-6)
