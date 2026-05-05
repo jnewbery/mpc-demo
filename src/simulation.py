@@ -18,8 +18,6 @@ import numpy as np
 class SimulationParams:
     T: int = 365                        # number of time steps (days)
     # Price parameters
-    price_mean: float = 80.0            # £/MWh annual mean
-    price_seasonal_amp: float = 30.0    # winter premium amplitude (£/MWh)
     price_ar1_phi: float = 0.85         # AR(1) autocorrelation coefficient
     price_ar1_sigma: float = 8.0        # AR(1) innovation std dev (£/MWh)
     # Forecast parameters
