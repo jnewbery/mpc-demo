@@ -238,14 +238,14 @@ def _(cop_value, datetime, demand, go, mo, np, prices, result):
     ))
     _fig1.update_layout(
         title="Dispatch Schedule",
-        xaxis=dict(tickvals=_tick_doys, ticktext=_tick_labels, showgrid=True, gridcolor="#e5e5e5"),
+        xaxis=dict(tickvals=_tick_doys, ticktext=_tick_labels, showgrid=True, gridcolor="#e5e5e5", domain=[0.05, 0.95]),
         yaxis=dict(title="MWh/day", zeroline=True),
         yaxis2=dict(title="€/MWh", overlaying="y", side="right", showgrid=False),
         barmode="relative",
         plot_bgcolor="white",
         height=350,
         margin=dict(t=50, b=40, l=60, r=60),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        legend=dict(orientation="h", yanchor="bottom", y=0.98, xanchor="left", x=0),
     )
 
     # --- Heat demand chart ---
@@ -259,11 +259,11 @@ def _(cop_value, datetime, demand, go, mo, np, prices, result):
     ))
     _fig_demand.update_layout(
         title="Heat Demand",
-        xaxis=dict(tickvals=_tick_doys, ticktext=_tick_labels, showgrid=True, gridcolor="#e5e5e5"),
+        xaxis=dict(tickvals=_tick_doys, ticktext=_tick_labels, showgrid=True, gridcolor="#e5e5e5", domain=[0.05, 0.95]),
         yaxis=dict(title="MWh/day", showgrid=True, gridcolor="#e5e5e5"),
         plot_bgcolor="white",
         height=300,
-        margin=dict(t=50, b=40, l=60, r=20),
+        margin=dict(t=50, b=40, l=60, r=60),
     )
 
     # --- SoC chart ---
@@ -277,11 +277,11 @@ def _(cop_value, datetime, demand, go, mo, np, prices, result):
     ))
     _fig2.update_layout(
         title="State of Charge",
-        xaxis=dict(tickvals=_tick_doys, ticktext=_tick_labels, showgrid=True, gridcolor="#e5e5e5"),
+        xaxis=dict(tickvals=_tick_doys, ticktext=_tick_labels, showgrid=True, gridcolor="#e5e5e5", domain=[0.05, 0.95]),
         yaxis=dict(title="MWh", showgrid=True, gridcolor="#e5e5e5"),
         plot_bgcolor="white",
         height=300,
-        margin=dict(t=50, b=40, l=60, r=20),
+        margin=dict(t=50, b=40, l=60, r=60),
     )
 
     # --- Cumulative cost chart ---
@@ -302,12 +302,12 @@ def _(cop_value, datetime, demand, go, mo, np, prices, result):
     ))
     _fig3.update_layout(
         title="Cumulative Electricity Cost",
-        xaxis=dict(tickvals=_tick_doys, ticktext=_tick_labels, showgrid=True, gridcolor="#e5e5e5"),
+        xaxis=dict(tickvals=_tick_doys, ticktext=_tick_labels, showgrid=True, gridcolor="#e5e5e5", domain=[0.05, 0.95]),
         yaxis=dict(title="€", showgrid=True, gridcolor="#e5e5e5"),
         plot_bgcolor="white",
         height=300,
-        margin=dict(t=50, b=40, l=60, r=20),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        margin=dict(t=50, b=40, l=60, r=60),
+        legend=dict(orientation="h", yanchor="bottom", y=0.95, xanchor="left", x=0),
     )
 
     mo.vstack([_fig1, _fig_demand, _fig2, _fig3])
