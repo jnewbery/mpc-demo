@@ -17,10 +17,11 @@ def _():
     import numpy as np
     import polars as pl
     import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
     from src.autoregression import ar1_fit, ar1_simulate
     from src.fourier import fourier_seasonal_fit
     from src.heat_demand import calibrate, compute_demand
-    return ar1_fit, ar1_simulate, calibrate, compute_demand, datetime, fourier_seasonal_fit, go, mo, np, pathlib, pl
+    return ar1_fit, ar1_simulate, calibrate, compute_demand, datetime, fourier_seasonal_fit, go, make_subplots, mo, np, pathlib, pl
 
 
 @app.cell
@@ -161,7 +162,7 @@ def _(available_temp_years, mo):
 
 
 @app.cell
-def _(available_temp_years, datetime, df_temp, fourier_seasonal_fit, go, mo, np, pl, temp_k_harmonics, temp_regression_years):
+def _(available_temp_years, datetime, df_temp, fourier_seasonal_fit, go, make_subplots, mo, np, pl, temp_k_harmonics, temp_regression_years):
     K_temp = temp_k_harmonics.value
 
     _all = df_temp.filter(
@@ -183,11 +184,16 @@ def _(available_temp_years, datetime, df_temp, fourier_seasonal_fit, go, mo, np,
     ]
 
     _included = set(temp_regression_years.value)
-    _fig2 = go.Figure()
+    _fig = make_subplots(
+        rows=2, cols=1,
+        shared_xaxes=True,
+        row_heights=[0.6, 0.4],
+        vertical_spacing=0.04,
+    )
     for _i, _year in enumerate(available_temp_years):
         _ydf = df_temp.filter(pl.col("year") == _year)
         _in = _year in _included
-        _fig2.add_trace(go.Scatter(
+        _fig.add_trace(go.Scatter(
             x=_ydf.get_column("day_of_year").to_list(),
             y=_ydf.get_column("tmk").to_list(),
             mode="lines",
@@ -195,63 +201,44 @@ def _(available_temp_years, datetime, df_temp, fourier_seasonal_fit, go, mo, np,
             name=str(_year),
             opacity=0.45 if _in else 0.2,
             hovertemplate=f"{_year} day %{{x}}<br>%{{y:.1f}} °C<extra></extra>",
-        ))
-    _fig2.add_trace(go.Scatter(
+        ), row=1, col=1)
+    _fig.add_trace(go.Scatter(
         x=_doy_range.tolist(),
         y=seasonal_temp.tolist(),
         mode="lines",
         line=dict(color="black", width=2.5),
         name="Seasonal fit",
         hovertemplate="Seasonal day %{x}<br>%{y:.1f} °C<extra></extra>",
-    ))
-    _fig2.add_hline(y=0, line=dict(color="rgba(0,0,0,0.25)", width=1, dash="dot"))
-    _fig2.update_layout(
-        title=f"Görlitz — Fourier seasonal fit (K={K_temp} harmonics)",
-        xaxis=dict(
-            title="",
-            tickvals=_tick_doys, ticktext=_tick_labels,
-            showgrid=True, gridcolor="#e5e5e5",
-        ),
-        yaxis=dict(title="°C", showgrid=True, gridcolor="#e5e5e5"),
-        plot_bgcolor="white",
-        hovermode="x unified",
-        legend=dict(title="Year"),
-        margin=dict(t=50, b=40, l=60, r=20),
-        height=450,
-    )
-    mo.vstack([mo.hstack([temp_regression_years, temp_k_harmonics], justify="start"), mo.ui.plotly(_fig2)])
-
-
-@app.cell
-def _(datetime, go, mo, seasonal_temp):
-    _tick_months = [datetime.date(2001, m, 1) for m in range(1, 13)]
-    _tick_doys = [d.timetuple().tm_yday for d in _tick_months]
-    _tick_labels = [d.strftime("%b") for d in _tick_months]
-
-    _fig3 = go.Figure()
-    _fig3.add_trace(go.Scatter(
+    ), row=1, col=1)
+    _fig.add_hline(y=0, line=dict(color="rgba(0,0,0,0.25)", width=1, dash="dot"), row=1, col=1)
+    _fig.add_trace(go.Scatter(
         x=list(range(1, 366)),
         y=seasonal_temp.tolist(),
         mode="lines",
         line=dict(color="#d62728", width=2.5),
         hovertemplate="Day %{x}<br>%{y:.1f} °C<extra></extra>",
         showlegend=False,
-    ))
-    _fig3.add_hline(y=0, line=dict(color="rgba(0,0,0,0.25)", width=1, dash="dot"))
-    _fig3.update_layout(
-        title="Fourier seasonal fit — temperature",
-        xaxis=dict(
+    ), row=2, col=1)
+    _fig.add_hline(y=0, line=dict(color="rgba(0,0,0,0.25)", width=1, dash="dot"), row=2, col=1)
+    _fig.update_layout(
+        title=f"Görlitz — Fourier seasonal fit (K={K_temp} harmonics)",
+        xaxis=dict(tickvals=_tick_doys, showgrid=True, gridcolor="#e5e5e5"),
+        xaxis2=dict(
             title="",
-            tickvals=_tick_doys, ticktext=_tick_labels,
-            showgrid=True, gridcolor="#e5e5e5",
+            tickvals=_tick_doys,
+            ticktext=_tick_labels,
+            showgrid=True,
+            gridcolor="#e5e5e5",
         ),
         yaxis=dict(title="°C", showgrid=True, gridcolor="#e5e5e5"),
+        yaxis2=dict(title="°C", showgrid=True, gridcolor="#e5e5e5"),
         plot_bgcolor="white",
         hovermode="x unified",
+        legend=dict(title="Year"),
         margin=dict(t=50, b=40, l=60, r=20),
-        height=300,
+        height=700,
     )
-    mo.ui.plotly(_fig3)
+    mo.vstack([mo.hstack([temp_regression_years, temp_k_harmonics], justify="start"), mo.ui.plotly(_fig)])
 
 
 @app.cell

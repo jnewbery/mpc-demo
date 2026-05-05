@@ -16,9 +16,10 @@ def _():
     import numpy as np
     import polars as pl
     import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
     from src.autoregression import ar1_fit, ar1_simulate
     from src.fourier import fourier_seasonal_fit
-    return ar1_fit, ar1_simulate, datetime, fourier_seasonal_fit, go, mo, np, pl
+    return ar1_fit, ar1_simulate, datetime, fourier_seasonal_fit, go, make_subplots, mo, np, pl
 
 
 @app.cell
@@ -160,7 +161,7 @@ def _(available_years, mo):
 
 
 @app.cell
-def _(available_years, datetime, df, fourier_seasonal_fit, go, k_harmonics, mo, np, pl, regression_years):
+def _(available_years, datetime, df, fourier_seasonal_fit, go, k_harmonics, make_subplots, mo, np, pl, regression_years):
     K = k_harmonics.value
 
     _all = df.filter(
@@ -172,7 +173,6 @@ def _(available_years, datetime, df, fourier_seasonal_fit, go, k_harmonics, mo, 
     _doy_range = np.arange(1, 366, dtype=float)
     seasonal_price = fourier_seasonal_fit(_doys, _prices, K)
 
-    # Build tick labels
     _tick_months = [datetime.date(2001, m, 1) for m in range(1, 13)]
     _tick_doys = [d.timetuple().tm_yday for d in _tick_months]
     _tick_labels = [d.strftime("%b") for d in _tick_months]
@@ -183,11 +183,16 @@ def _(available_years, datetime, df, fourier_seasonal_fit, go, k_harmonics, mo, 
     ]
 
     _included = set(regression_years.value)
-    _fig2 = go.Figure()
+    _fig = make_subplots(
+        rows=2, cols=1,
+        shared_xaxes=True,
+        row_heights=[0.6, 0.4],
+        vertical_spacing=0.04,
+    )
     for _i, _year in enumerate(available_years):
         _ydf = df.filter(pl.col("year") == _year)
         _in = _year in _included
-        _fig2.add_trace(go.Scatter(
+        _fig.add_trace(go.Scatter(
             x=_ydf.get_column("day_of_year").to_list(),
             y=_ydf.get_column("price").to_list(),
             mode="lines",
@@ -195,18 +200,27 @@ def _(available_years, datetime, df, fourier_seasonal_fit, go, k_harmonics, mo, 
             name=str(_year),
             opacity=0.45 if _in else 0.2,
             hovertemplate=f"{_year} day %{{x}}<br>%{{y:.2f}} €/MWh<extra></extra>",
-        ))
-    _fig2.add_trace(go.Scatter(
+        ), row=1, col=1)
+    _fig.add_trace(go.Scatter(
         x=_doy_range.tolist(),
         y=seasonal_price.tolist(),
         mode="lines",
         line=dict(color="black", width=2.5),
         name="Seasonal fit",
         hovertemplate="Seasonal day %{x}<br>%{y:.2f} €/MWh<extra></extra>",
-    ))
-    _fig2.update_layout(
+    ), row=1, col=1)
+    _fig.add_trace(go.Scatter(
+        x=list(range(1, 366)),
+        y=seasonal_price.tolist(),
+        mode="lines",
+        line=dict(color="#1f77b4", width=2.5),
+        hovertemplate="Day %{x}<br>%{y:.2f} €/MWh<extra></extra>",
+        showlegend=False,
+    ), row=2, col=1)
+    _fig.update_layout(
         title=f"Germany/Luxembourg — Fourier seasonal fit (K={K} harmonics)",
-        xaxis=dict(
+        xaxis=dict(tickvals=_tick_doys, showgrid=True, gridcolor="#e5e5e5"),
+        xaxis2=dict(
             title="",
             tickvals=_tick_doys,
             ticktext=_tick_labels,
@@ -214,44 +228,14 @@ def _(available_years, datetime, df, fourier_seasonal_fit, go, k_harmonics, mo, 
             gridcolor="#e5e5e5",
         ),
         yaxis=dict(title="€/MWh", showgrid=True, gridcolor="#e5e5e5"),
+        yaxis2=dict(title="€/MWh", showgrid=True, gridcolor="#e5e5e5"),
         plot_bgcolor="white",
         hovermode="x unified",
         legend=dict(title="Year"),
         margin=dict(t=50, b=40, l=60, r=20),
-        height=450,
+        height=700,
     )
-    mo.vstack([mo.hstack([regression_years, k_harmonics], justify="start"), mo.ui.plotly(_fig2)])
-
-
-@app.cell
-def _(datetime, go, mo, seasonal_price):
-    _tick_months = [datetime.date(2001, m, 1) for m in range(1, 13)]
-    _tick_doys = [d.timetuple().tm_yday for d in _tick_months]
-    _tick_labels = [d.strftime("%b") for d in _tick_months]
-
-    _fig_fit = go.Figure()
-    _fig_fit.add_trace(go.Scatter(
-        x=list(range(1, 366)),
-        y=seasonal_price.tolist(),
-        mode="lines",
-        line=dict(color="#1f77b4", width=2.5),
-        hovertemplate="Day %{x}<br>%{y:.2f} €/MWh<extra></extra>",
-        showlegend=False,
-    ))
-    _fig_fit.update_layout(
-        title="Fourier seasonal fit",
-        xaxis=dict(
-            title="",
-            tickvals=_tick_doys, ticktext=_tick_labels,
-            showgrid=True, gridcolor="#e5e5e5",
-        ),
-        yaxis=dict(title="€/MWh", showgrid=True, gridcolor="#e5e5e5"),
-        plot_bgcolor="white",
-        hovermode="x unified",
-        margin=dict(t=50, b=40, l=60, r=20),
-        height=300,
-    )
-    mo.ui.plotly(_fig_fit)
+    mo.vstack([mo.hstack([regression_years, k_harmonics], justify="start"), mo.ui.plotly(_fig)])
 
 
 @app.cell
