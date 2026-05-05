@@ -48,10 +48,9 @@ def _(mo):
     produced by `scripts/generate_prices.py` and `scripts/generate_heat_demand.py`,
     and then constructs forecasts from the perspective of the controller.
 
-    A nominal scenario is a plausible full-year realisation of prices and heat
-    demand, drawn by fitting a Fourier seasonal model and AR(1) residuals to
-    historical data.  These scenarios represent the *true* year that unfolds —
-    the controller does not observe future values directly and must instead rely
+    A nominal scenario is a full-year realisation of prices and heat
+    demand.  These scenarios represent the *true* year that will unfold.
+    The controller does not observe future values directly and must instead rely
     on forecasts.  How well those forecasts track the nominal scenario determines
     how much value the controller can extract.
 
@@ -290,10 +289,20 @@ def _(
         hovertemplate="Day %{x}<br>%{y:.1f} €/MWh<extra></extra>",
     ))
     _fig2.add_trace(go.Scatter(
-        x=np.arange(1, _t + 1), y=prices,
+        x=np.arange(1, _t + 2), y=prices,
         mode="lines", name="Historic",
         line=dict(color="black", width=1.5),
         hovertemplate="Day %{x}<br>%{y:.1f} €/MWh<extra></extra>",
+        legendgroup="historic",
+        showlegend=True,
+    ))
+    _fig2.add_trace(go.Scatter(
+        x=np.arange(1, _t + 2), y=prices,
+        mode="lines",
+        line=dict(color="red", width=1.5, dash="dash"),
+        hovertemplate="Day %{x}<br>%{y:.1f} €/MWh<extra></extra>",
+        legendgroup="historic",
+        showlegend=False,
     ))
 
     _fig2.update_layout(
@@ -307,6 +316,7 @@ def _(
         yaxis=dict(title="€/MWh", showgrid=True, gridcolor="#e5e5e5", range=[0, max(prices) * 1.1]),
         plot_bgcolor="white",
         hovermode="x unified",
+        dragmode="zoom",
         legend=dict(orientation="h", yanchor="bottom", y=0.98, xanchor="left", x=0),
         margin=dict(t=60, b=40, l=60, r=20),
         height=450,
