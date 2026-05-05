@@ -103,3 +103,18 @@ def test_same_seed_gives_identical_series():
     p1 = generate_price_series(SimulationParams(seed=99))
     p2 = generate_price_series(SimulationParams(seed=99))
     np.testing.assert_array_equal(p1, p2)
+
+
+def test_forecast_window_with_explicit_seasonal_array():
+    """get_forecast_window accepts an explicit seasonal_array and uses it instead
+    of the synthetic formula — results should differ from the default."""
+    T = 60
+    params = SimulationParams(seed=10, T=T)
+    prices = generate_price_series(params)
+    # Flat seasonal array offset from the default formula
+    seasonal = np.full(T, params.price_mean + 10.0)
+    fc_explicit = get_forecast_window(0, 30, prices, params, seasonal_array=seasonal)
+    fc_default = get_forecast_window(0, 30, prices, params)
+    assert not np.allclose(fc_explicit, fc_default), \
+        "Explicit seasonal array should produce a different forecast from the synthetic one"
+    assert np.all(fc_explicit >= 0)

@@ -116,29 +116,3 @@ def run_mpc(
         "n_fallbacks": n_fallbacks,
     }
 
-
-if __name__ == "__main__":
-    from src.simulation import generate_price_series, generate_demand_series
-    from src.storage_lp import solve_perfect_foresight
-
-    sim = SimulationParams(seed=42, T=365)
-    prices = generate_price_series(sim)
-    demand = generate_demand_series(sim)
-    sp = StorageParams()
-    mp = MPCParams(H=30)
-
-    baseline_cost = float(np.dot(prices, demand) / sp.cop)
-    pf = solve_perfect_foresight(prices, demand, sp)
-    mpc = run_mpc(prices, demand, sp, mp, sim)
-
-    print(f"Baseline cost:     £{baseline_cost:,.0f}")
-    print(f"Perfect foresight: £{pf['cost']:,.0f}  ({100 * (pf['cost'] - baseline_cost) / baseline_cost:+.1f}%)")
-    print(f"MPC (H={mp.H}):        £{mpc['cost']:,.0f}  ({100 * (mpc['cost'] - baseline_cost) / baseline_cost:+.1f}%)")
-    print(f"MPC fallbacks:     {mpc['n_fallbacks']}")
-
-    assert mpc["cost"] >= pf["cost"] - 1e-3, "MPC cost is below perfect foresight — something is wrong!"
-    assert np.all(mpc["soc"] >= sp.s_min - 1e-6), "SoC below s_min!"
-    assert np.all(mpc["soc"] <= sp.s_max + 1e-6), "SoC above s_max!"
-    assert np.all(mpc["hp_output"] >= -1e-6), "Negative HP output!"
-    assert np.all(mpc["hp_output"] <= sp.h_max + 1e-6), "HP output exceeds h_max!"
-    print("\nAll constraints satisfied. ✓")

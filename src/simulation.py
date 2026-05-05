@@ -341,31 +341,3 @@ def ar1_simulate(
         r[t] = phi * r[t - 1] + rng.normal(0, sigma)
     return r
 
-
-if __name__ == "__main__":
-    params = SimulationParams()
-
-    prices = generate_price_series(params)
-    demand = generate_demand_series(params)
-
-    print("Price series summary:")
-    print(f"  min={prices.min():.1f}, max={prices.max():.1f}, mean={prices.mean():.1f} £/MWh")
-
-    print("Demand series summary:")
-    print(f"  min={demand.min():.1f}, max={demand.max():.1f}, mean={demand.mean():.1f} MWh")
-
-    # Spot-check: winter (Jan, days 0-30) vs summer (Jul, days 180-210)
-    print(f"\nWinter avg price (days 0-30):   {prices[:31].mean():.1f} £/MWh")
-    print(f"Summer avg price (days 180-210): {prices[180:211].mean():.1f} £/MWh")
-    print(f"Winter avg demand (days 0-30):   {demand[:31].mean():.1f} MWh")
-    print(f"Summer avg demand (days 180-210): {demand[180:211].mean():.1f} MWh")
-
-    # Spot-check weekend effect (first two weeks)
-    weekday_demand = demand[[t for t in range(14) if t % 7 not in (5, 6)]]
-    weekend_demand = demand[[t for t in range(14) if t % 7 in (5, 6)]]
-    print(f"\nFirst 2-week weekday avg demand: {weekday_demand.mean():.1f} MWh")
-    print(f"First 2-week weekend avg demand: {weekend_demand.mean():.1f} MWh")
-
-    forecast_window = get_forecast_window(0, 30, prices, params)
-    print(f"\n30-day price forecast from day 0:")
-    print(f"  min={forecast_window.min():.1f}, max={forecast_window.max():.1f}, mean={forecast_window.mean():.1f} £/MWh")

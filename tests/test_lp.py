@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from src.simulation import SimulationParams, generate_price_series, generate_demand_series
+from src.simulation import SimulationParams, generate_price_series, generate_demand_series, generate_seasonal_prices
 from src.storage_lp import StorageParams, solve_perfect_foresight, solve_single_window
 from src.mpc import MPCParams, run_mpc
 
@@ -181,3 +181,24 @@ def test_single_window_matches_pf_on_full_horizon():
     sw = solve_single_window(prices, demand, sp.s0, sp)
 
     assert sw["cost"] == pytest.approx(pf["cost"], rel=1e-4)
+
+
+def test_pf_no_simultaneous_charge_discharge():
+    """After post-processing, no day should have both charge > 0 and discharge > 0."""
+    result, *_ = _default_pf()
+    overlap = np.minimum(result["charge"], result["discharge"])
+    assert np.all(overlap < 1e-6), "Simultaneous charge/discharge found in LP solution"
+
+
+def test_mpc_with_seasonal_prices():
+    """run_mpc with an explicit seasonal_prices array should complete without fallbacks."""
+    sim = SimulationParams(seed=42, T=90)
+    prices = generate_price_series(sim)
+    demand = generate_demand_series(sim)
+    seasonal = generate_seasonal_prices(sim)
+    sp = StorageParams()
+    mpc = run_mpc(prices, demand, sp, MPCParams(H=14), sim, seasonal_prices=seasonal)
+
+    assert np.all(mpc["soc"] >= sp.s_min - 1e-5)
+    assert np.all(mpc["soc"] <= sp.s_max + 1e-5)
+    assert mpc["n_fallbacks"] == 0
