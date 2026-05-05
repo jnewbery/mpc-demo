@@ -1,74 +1,55 @@
-import pathlib
 import numpy as np
 import pytest
 
 from src.storage_lp import StorageParams, solve_perfect_foresight
 
-_DATA_DIR = pathlib.Path(__file__).parent.parent / "data"
-
-
-def _prices(rows: int | None = None) -> np.ndarray:
-    arr = np.genfromtxt(
-        _DATA_DIR / "price_scenarios" / "scenario_1.csv",
-        delimiter=",", skip_header=1, usecols=(2,),
-    )
-    return arr if rows is None else arr[:rows]
-
-def _demand(rows: int | None = None) -> np.ndarray:
-    arr = np.genfromtxt(
-        _DATA_DIR / "heat_demand_scenarios" / "scenario_1.csv",
-        delimiter=",", skip_header=1, usecols=(2,),
-    )
-    return arr if rows is None else arr[:rows]
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _default_pf():
-    prices = _prices()
-    demand = _demand()
-    sp = StorageParams()
-    result = solve_perfect_foresight(prices, demand, sp)
-    return result, prices, demand, sp
+@pytest.fixture
+def _default_pf(test_prices: np.ndarray, test_demand: np.ndarray,
+                test_sp: StorageParams) -> tuple[dict, np.ndarray, np.ndarray, StorageParams]:
+    result = solve_perfect_foresight(test_prices, test_demand, test_sp)
+    return result, test_prices, test_demand, test_sp
 
 
 # ---------------------------------------------------------------------------
 # Perfect foresight
 # ---------------------------------------------------------------------------
 
-def test_pf_status_optimal():
-    result, *_ = _default_pf()
+def test_pf_status_optimal(_default_pf):
+    result, *_ = _default_pf
     assert result["status"] in ("optimal", "optimal_inaccurate")
 
 
-def test_pf_soc_bounds():
-    result, _, _, sp = _default_pf()
+def test_pf_soc_bounds(_default_pf):
+    result, _, _, sp = _default_pf
     assert np.all(result["soc"] >= sp.s_min - 1e-5)
     assert np.all(result["soc"] <= sp.s_max + 1e-5)
 
 
-def test_pf_charge_bounds():
-    result, _, _, sp = _default_pf()
+def test_pf_charge_bounds(_default_pf):
+    result, _, _, sp = _default_pf
     assert np.all(result["charge"] >= -1e-6)
     assert np.all(result["charge"] <= sp.u_plus_max + 1e-5)
 
 
-def test_pf_discharge_bounds():
-    result, _, _, sp = _default_pf()
+def test_pf_discharge_bounds(_default_pf):
+    result, _, _, sp = _default_pf
     assert np.all(result["discharge"] >= -1e-6)
     assert np.all(result["discharge"] <= sp.u_minus_max + 1e-5)
 
 
-def test_pf_hp_output_bounds():
-    result, _, _, sp = _default_pf()
+def test_pf_hp_output_bounds(_default_pf):
+    result, _, _, sp = _default_pf
     assert np.all(result["hp_output"] >= -1e-5)
     assert np.all(result["hp_output"] <= sp.h_max + 1e-5)
 
 
-def test_pf_cost_below_baseline():
+def test_pf_cost_below_baseline(_default_pf):
     """Perfect foresight cost must not exceed the no-storage baseline."""
-    result, prices, demand, sp = _default_pf()
+    result, prices, demand, sp = _default_pf
     baseline = float(np.dot(prices, demand) / sp.cop)
     assert result["cost"] <= baseline + 1e-3
 
@@ -129,8 +110,8 @@ def test_pf_2step_no_benefit():
     assert (result["charge"] - result["discharge"]).sum() == pytest.approx(0.0, abs=1e-3)
 
 
-def test_pf_no_simultaneous_charge_discharge():
+def test_pf_no_simultaneous_charge_discharge(_default_pf):
     """After post-processing, no day should have both charge > 0 and discharge > 0."""
-    result, *_ = _default_pf()
+    result, *_ = _default_pf
     overlap = np.minimum(result["charge"], result["discharge"])
     assert np.all(overlap < 1e-6), "Simultaneous charge/discharge found in LP solution"
