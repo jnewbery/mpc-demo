@@ -58,19 +58,6 @@ def _forecast_alpha(horizons: np.ndarray, params: SimulationParams) -> np.ndarra
     return alpha
 
 
-def forecast_sigma(horizons: np.ndarray, params: SimulationParams) -> np.ndarray:
-    """Expected spread (1σ) of forecast predictions around the seasonal baseline.
-
-    σ(h) = σ_stationary × α(h)
-
-    At short horizons (α=1) the forecast can deviate as widely as the true
-    price does (±σ_stationary). At long horizons (α→0) it converges to seasonal.
-    """
-    phi = params.price_ar1_phi
-    sigma_stationary = params.price_ar1_sigma / np.sqrt(1 - phi ** 2)
-    return sigma_stationary * _forecast_alpha(horizons, params)
-
-
 def _forecast_deviation(
     t: int,
     true_prices: np.ndarray,
