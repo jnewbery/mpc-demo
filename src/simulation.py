@@ -28,13 +28,6 @@ class SimulationParams:
     seed: int = 42
 
 
-def _seasonal_at(day_indices: np.ndarray, params: SimulationParams) -> np.ndarray:
-    """Seasonal baseline for arbitrary day indices (may extend beyond T)."""
-    return params.price_mean + params.price_seasonal_amp * np.cos(
-        2 * np.pi * day_indices / 365
-    )
-
-
 def _forecast_alpha(horizons: np.ndarray, params: SimulationParams) -> np.ndarray:
     """Blending weight α(h): 1 = perfect forecast, 0 = seasonal only.
 
