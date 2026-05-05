@@ -4,7 +4,6 @@ import pytest
 
 from src.simulation import (
     SimulationParams,
-    generate_demand_series,
     get_forecast_window,
     _seasonal_at,
 )
@@ -34,19 +33,6 @@ def test_prices_shape():
     assert _prices().shape == (365,)
 
 
-def test_demand_non_negative():
-    params = SimulationParams(seed=0)
-    demand = generate_demand_series(params)
-    assert np.all(demand >= 0), "Demand contains negative values"
-
-
-def test_demand_plausible_range():
-    params = SimulationParams(seed=0)
-    demand = generate_demand_series(params)
-    assert demand.mean() == pytest.approx(params.demand_mean, abs=15), \
-        "Annual mean demand is far from expected"
-
-
 def test_seasonal_winter_peak():
     """Prices and demand should be higher in winter (days 0–30) than summer (days 180–210)."""
     prices = np.genfromtxt(
@@ -61,16 +47,6 @@ def test_seasonal_winter_peak():
         "Seasonal prices should peak in winter"
     assert demand[:31].mean() > demand[180:211].mean(), \
         "Seasonal demand should peak in winter"
-
-
-def test_demand_weekend_dip():
-    """Weekend demand should be lower than weekday demand on average."""
-    params = SimulationParams(seed=42, T=365)
-    demand = generate_demand_series(params)
-    t = np.arange(365)
-    weekday = demand[t % 7 < 5].mean()
-    weekend = demand[t % 7 >= 5].mean()
-    assert weekend < weekday, "Weekend demand should be lower than weekday demand"
 
 
 def test_forecast_matches_true_price_at_short_horizons():

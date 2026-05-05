@@ -34,38 +34,6 @@ class SimulationParams:
     seed: int = 42
 
 
-def generate_demand_series(params: SimulationParams) -> np.ndarray:
-    """Generate a daily heat demand series with seasonal and weekly patterns.
-
-    Seasonal component peaks in winter (t=0 = 1 Jan).
-    Weekend days (t % 7 in {5, 6}, treating t=0 as Monday) have reduced demand.
-
-    Returns
-    -------
-    np.ndarray of shape (T,), demand in MWh/day, clipped to a minimum of 0.0.
-    """
-    rng = np.random.default_rng(params.seed + 1)
-    t = np.arange(params.T)
-
-    seasonal = params.demand_mean + params.demand_seasonal_amp * np.cos(
-        2 * np.pi * t / 365
-    )
-
-    # Weekend multiplier: day-of-week 5=Saturday, 6=Sunday (Mon=0)
-    day_of_week = t % 7
-    weekend_mask = (day_of_week == 5) | (day_of_week == 6)
-    multiplier = np.where(weekend_mask, params.demand_weekend_factor, 1.0)
-
-    # AR(1) noise: ε[t] = φ·ε[t-1] + σ·z[t]
-    innovations = rng.standard_normal(params.T) * params.demand_noise_sigma
-    noise = np.zeros(params.T)
-    for i in range(1, params.T):
-        noise[i] = params.demand_ar1_phi * noise[i - 1] + innovations[i]
-
-    demand = np.maximum(0.0, seasonal * multiplier + noise)
-    return demand
-
-
 def _seasonal_at(day_indices: np.ndarray, params: SimulationParams) -> np.ndarray:
     """Seasonal baseline for arbitrary day indices (may extend beyond T)."""
     return params.price_mean + params.price_seasonal_amp * np.cos(
