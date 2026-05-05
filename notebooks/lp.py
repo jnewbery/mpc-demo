@@ -160,9 +160,10 @@ def _(mo):
 
     mo.vstack([
         mo.md("### Storage"),
-        mo.hstack([s_max, s_min, s0, u_plus_max, u_minus_max], justify="start"),
+        mo.hstack([s_max, s_min, s0], justify="start"),
+        mo.hstack([u_plus_max, u_minus_max, eta], justify="start"),
         mo.md("### Heat pump"),
-        mo.hstack([eta, cop, h_max], justify="start"),
+        mo.hstack([cop, h_max], justify="start"),
     ])
     return cop, eta, h_max, s0, s_max, s_min, u_minus_max, u_plus_max
 

@@ -14,24 +14,16 @@ which is a standard simplification for thermal systems where demand is predictab
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import numpy as np
 
 from .forecast import SimulationParams, get_forecast_window
 from .storage_lp import StorageParams, solve_single_window
 
 
-@dataclass
-class MPCParams:
-    H: int = 30    # rolling horizon length (days)
-
-
 def run_mpc(
     true_prices: np.ndarray,
     true_demand: np.ndarray,
     storage_params: StorageParams,
-    mpc_params: MPCParams,
     sim_params: SimulationParams,
     seasonal_prices: np.ndarray,
 ) -> dict:
@@ -48,7 +40,6 @@ def run_mpc(
     true_demand : np.ndarray of shape (T,) — true heat demand (MWh/day);
         used both as the within-window demand forecast and for cost accounting
     storage_params : StorageParams
-    mpc_params : MPCParams
     sim_params : SimulationParams — needed by get_forecast_window for the seed
         and forecast blending parameters
 
@@ -76,7 +67,7 @@ def run_mpc(
     s = storage_params.s0
 
     for t in range(T):
-        H_window = min(mpc_params.H, T - t)
+        H_window = T - t
 
         price_fc = get_forecast_window(t, true_prices, seasonal_prices, sim_params)[:H_window]
         demand_fc = true_demand[t : t + H_window]

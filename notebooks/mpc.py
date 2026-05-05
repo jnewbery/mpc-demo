@@ -22,10 +22,9 @@ def _():
 
     from src.forecast import SimulationParams
     from src.storage_lp import StorageParams, solve_perfect_foresight
-    from src.mpc import MPCParams, run_mpc
+    from src.mpc import run_mpc
 
     return (
-        MPCParams,
         SimulationParams,
         StorageParams,
         dataclasses,
@@ -50,14 +49,15 @@ def _(mo):
     the **perfect foresight** benchmark.
 
     Both manage the same thermal storage system. The perfect foresight solver
-    knows all future prices, while the MPC controller only sees a noisy price
-    forecast over a short window.
+    knows all future prices, while the MPC controller only sees a forecast of future
+    prices. These are accurate over a short time horizon, but revert to the seasonal
+    mean over a longer time horizon as the best guess.
 
     At each day $t$ the MPC controller:
 
-    1. Generates a price forecast for days $t, \ldots, t+H-1$ using the blended
-       random-walk model from the simulation module
-    2. Solves the LP over that $H$-day window, treating demand as known
+    1. Generates a price forecast for days after $t$ using the blended
+       autoregression model from the forecast module
+    2. Solves the LP with that forecast, treating demand as known
     3. Applies only the first action $(u^+_t, u^-_t)$ from the solution
     4. Observes the true price and advances the true state of charge
 
@@ -100,7 +100,6 @@ def _(mo):
     eta = mo.ui.slider(start=0.5, stop=1.0, step=0.05, value=0.9, label="Discharge efficiency η", show_value=True)
     cop = mo.ui.slider(start=1.0, stop=5.0, step=0.25, value=3.0, label="Heat pump COP", show_value=True)
     h_max = mo.ui.number(start=10, stop=10_000, step=10, value=600, label="Max HP output (MWh/day)")
-    mpc_horizon = mo.ui.slider(start=1, stop=90, step=1, value=30, label="MPC horizon H (days)", show_value=True)
     blend_horizon = mo.ui.slider(
         start=1, stop=90, value=30, step=1,
         label="Blend horizon (days)",
@@ -109,18 +108,18 @@ def _(mo):
 
     mo.vstack([
         mo.md("### Storage"),
-        mo.hstack([s_max, s_min, s0, u_plus_max, u_minus_max], justify="start"),
+        mo.hstack([s_max, s_min, s0], justify="start"),
+        mo.hstack([u_plus_max, u_minus_max, eta], justify="start"),
         mo.md("### Heat pump"),
         mo.hstack([eta, cop, h_max], justify="start"),
         mo.md("### MPC"),
-        mo.hstack([mpc_horizon, blend_horizon], justify="start"),
+        mo.hstack([blend_horizon], justify="start"),
     ])
-    return blend_horizon, cop, eta, h_max, mpc_horizon, s0, s_max, s_min, u_minus_max, u_plus_max
+    return blend_horizon, cop, eta, h_max, s0, s_max, s_min, u_minus_max, u_plus_max
 
 
 @app.cell
 def _(
-    MPCParams,
     SimulationParams,
     StorageParams,
     blend_horizon,
@@ -130,7 +129,6 @@ def _(
     h_max,
     heat_scenario_selector,
     mo,
-    mpc_horizon,
     pl,
     price_scenario_selector,
     run_mpc,
@@ -160,7 +158,6 @@ def _(
         SimulationParams(T=len(prices)),
         blend_horizon=blend_horizon.value,
     )
-    _mp = MPCParams(H=mpc_horizon.value)
 
     try:
         pf = solve_perfect_foresight(prices, demand, _sp)
@@ -173,7 +170,7 @@ def _(
         mo.stop(True, mo.callout(mo.md(f"**Perfect foresight solver error:** {pf_error}"), kind="danger"))
 
     try:
-        mpc = run_mpc(prices, demand, _sp, _mp, _sim, seasonal_prices)
+        mpc = run_mpc(prices, demand, _sp, _sim, seasonal_prices)
         mpc_error = None
     except Exception as e:
         mpc = None
