@@ -2,7 +2,7 @@ import pathlib
 import numpy as np
 import pytest
 
-from src.simulation import (
+from src.forecast import (
     SimulationParams,
     get_forecast_window,
 )

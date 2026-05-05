@@ -18,7 +18,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .simulation import SimulationParams, get_forecast_window
+from .forecast import SimulationParams, get_forecast_window
 from .storage_lp import StorageParams, solve_single_window
 
 

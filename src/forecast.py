@@ -1,10 +1,5 @@
 """
-simulation.py — Synthetic price and heat demand time series generator.
-
-Generates 365 daily steps (one calendar year) with:
-- Seasonal energy prices peaking in winter (AR(1) noise)
-- Heat demand (MWh/day) with seasonal and weekly (weekend dip) patterns
-- Noisy price forecasts with uncertainty growing with horizon
+forecast.py — Simulate a controller's forecasts of future prices and heat demand.
 """
 
 from __future__ import annotations

@@ -2,7 +2,7 @@ import pathlib
 import numpy as np
 import pytest
 
-from src.simulation import SimulationParams
+from src.forecast import SimulationParams
 from src.storage_lp import StorageParams, solve_perfect_foresight, solve_single_window
 from src.mpc import MPCParams, run_mpc
 

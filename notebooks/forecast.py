@@ -19,7 +19,7 @@ def _():
     import polars as pl
     import plotly.graph_objects as go
 
-    from src.simulation import (
+    from src.forecast import (
         SimulationParams,
         generate_price_forecast,
         generate_raw_price_forecast,
@@ -220,9 +220,9 @@ def _(
         forecast_short_term=_short,
         forecast_long_term=_long,
     )
-    _forecast_matrix = generate_price_forecast(prices, _fparams, seasonal_array=seasonal_price)
+    _forecast_matrix = generate_price_forecast(prices, _fparams, seasonal_prices=seasonal_price)
     price_forecast = _forecast_matrix[0, :]
-    price_forecast_raw = generate_raw_price_forecast(prices, _fparams, seasonal_array=seasonal_price)
+    price_forecast_raw = generate_raw_price_forecast(prices, _fparams, seasonal_prices=seasonal_price)
     return price_forecast, price_forecast_raw
 
 

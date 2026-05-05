@@ -20,7 +20,7 @@ def _():
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
 
-    from src.simulation import SimulationParams
+    from src.forecast import SimulationParams
     from src.storage_lp import StorageParams, solve_perfect_foresight
     from src.mpc import MPCParams, run_mpc
 
