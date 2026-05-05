@@ -44,8 +44,9 @@ def _(mo):
     mo.md(r"""
     # Forecasts
 
-    This notebook loads pre-generated **nominal** price and heat demand scenarios
-    produced by `scripts/generate_prices.py` and `scripts/generate_heat_demand.py`.
+    This notebook loads pre-generated nominal price and heat demand scenarios
+    produced by `scripts/generate_prices.py` and `scripts/generate_heat_demand.py`,
+    and then constructs forecasts from the perspective of the controller.
 
     A nominal scenario is a plausible full-year realisation of prices and heat
     demand, drawn by fitting a Fourier seasonal model and AR(1) residuals to
@@ -136,6 +137,7 @@ def _(datetime, go, heat_demand, mo, prices, seasonal_price):
             title="",
             tickvals=_tick_doys, ticktext=_tick_labels,
             showgrid=True, gridcolor="#e5e5e5",
+            domain=[0.05, 0.95],
         ),
         yaxis=dict(
             title=dict(text="€/MWh", font=dict(color=_blue)),
@@ -147,7 +149,7 @@ def _(datetime, go, heat_demand, mo, prices, seasonal_price):
         ),
         plot_bgcolor="white",
         hovermode="x unified",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        legend=dict(orientation="h", yanchor="bottom", y=0.98, xanchor="left", x=0),
         margin=dict(t=60, b=40, l=60, r=60),
         height=500,
     )
@@ -256,11 +258,12 @@ def _(datetime, go, mo, np, price_forecast, price_forecast_raw, prices, seasonal
             title="",
             tickvals=_tick_doys, ticktext=_tick_labels,
             showgrid=True, gridcolor="#e5e5e5",
+            domain=[0.05, 0.95],
         ),
         yaxis=dict(title="€/MWh", showgrid=True, gridcolor="#e5e5e5"),
         plot_bgcolor="white",
         hovermode="x unified",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        legend=dict(orientation="h", yanchor="bottom", y=0.98, xanchor="left", x=0),
         margin=dict(t=60, b=40, l=60, r=20),
         height=450,
     )
