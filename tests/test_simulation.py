@@ -62,7 +62,8 @@ def test_forecast_matches_true_price_at_short_horizons():
     T = 50
     params = SimulationParams(seed=7, T=T, forecast_short_term=T, forecast_long_term=T + 1)
     prices = _prices(rows=T)
-    forecast = get_forecast_window(0, T, prices, params)
+    seasonal_prices = _seasonal_prices(rows=T)
+    forecast = get_forecast_window(0, T, prices, params, seasonal_array=seasonal_prices)
     np.testing.assert_allclose(forecast, prices, rtol=1e-6,
         err_msg="Forecast should match true prices when short-term horizon covers full window")
 
@@ -73,13 +74,13 @@ def test_forecast_equals_seasonal_at_long_horizons():
     T = 60
     params = SimulationParams(seed=3, T=T, forecast_short_term=0, forecast_long_term=1)
     prices = _prices(rows=T)
-    forecast = get_forecast_window(0, T, prices, params)
+    seasonal_prices = _seasonal_prices(rows=T)
+    forecast = get_forecast_window(0, T, prices, params, seasonal_array=seasonal_prices)
 
-    seasonal = _seasonal_at(np.arange(T), params)
     # h=0: α=1 (short-term covers h=0), so forecast[0] = true price[0]
     assert forecast[0] == pytest.approx(prices[0], rel=1e-6)
     # h≥1: α=0, so forecast should equal seasonal
-    np.testing.assert_allclose(forecast[1:], seasonal[1:], rtol=1e-6,
+    np.testing.assert_allclose(forecast[1:], seasonal_prices[1:], rtol=1e-6,
         err_msg="Forecast should equal seasonal average when long-term horizon is 1")
 
 
@@ -89,17 +90,3 @@ def test_different_scenarios_differ():
 
 def test_loading_same_scenario_twice_is_identical():
     np.testing.assert_array_equal(_prices(scenario=1), _prices(scenario=1))
-
-
-def test_forecast_window_with_explicit_seasonal_array():
-    """get_forecast_window accepts an explicit seasonal_array and uses it instead
-    of the synthetic formula — results should differ from the default."""
-    T = 60
-    params = SimulationParams(seed=10, T=T)
-    prices = _prices(rows=T)
-    seasonal = _seasonal_prices(rows=T)
-    fc_explicit = get_forecast_window(0, 30, prices, params, seasonal_array=seasonal)
-    fc_default = get_forecast_window(0, 30, prices, params)
-    assert not np.allclose(fc_explicit, fc_default), \
-        "Explicit seasonal array should produce a different forecast from the synthetic one"
-    assert np.all(fc_explicit >= 0)
