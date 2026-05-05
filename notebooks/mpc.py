@@ -189,7 +189,7 @@ def _(
 
 
 @app.cell
-def _(cop_value, datetime, demand, go, make_subplots, mo, mpc, np, pf, prices):
+def _(cop_value, datetime, demand, go, make_subplots, mpc, np, pf, prices):
     _tick_months = [datetime.date(2001, m, 1) for m in range(1, 13)]
     _tick_doys = [d.timetuple().tm_yday for d in _tick_months]
     _tick_labels = [d.strftime("%b") for d in _tick_months]
@@ -197,75 +197,85 @@ def _(cop_value, datetime, demand, go, make_subplots, mo, mpc, np, pf, prices):
     _days = np.arange(1, len(prices) + 1)
     _colours = {"pf": "#4a90d9", "mpc": "#e07b39", "price": "black", "baseline": "grey"}
 
-    # --- Dispatch comparison ---
-    _fig1 = make_subplots(
-        rows=2, cols=1, shared_xaxes=True,
-        subplot_titles=("Perfect Foresight Dispatch", "MPC Dispatch"),
-        specs=[[{"secondary_y": True}], [{"secondary_y": True}]],
-        vertical_spacing=0.12,
+    _fig = make_subplots(
+        rows=4, cols=1,
+        shared_xaxes=True,
+        subplot_titles=("Perfect Foresight Dispatch", "MPC Dispatch", "State of Charge", "Cumulative Electricity Cost"),
+        specs=[
+            [{"secondary_y": True}],
+            [{"secondary_y": True}],
+            [{"secondary_y": False}],
+            [{"secondary_y": False}],
+        ],
+        row_heights=[0.27, 0.27, 0.23, 0.23],
+        vertical_spacing=0.07,
     )
+
+    # Rows 1 & 2: Dispatch (PF and MPC)
     for _row, _res, _col in [(1, pf, _colours["pf"]), (2, mpc, _colours["mpc"])]:
-        _fig1.add_trace(go.Bar(x=_days, y=_res["charge"], name="Charge", marker_color=_col,
-                               opacity=0.7, showlegend=(_row == 1)),
-                        row=_row, col=1, secondary_y=False)
-        _fig1.add_trace(go.Bar(x=_days, y=-_res["discharge"], name="Discharge",
-                               marker_color=_col, opacity=0.4, showlegend=(_row == 1)),
-                        row=_row, col=1, secondary_y=False)
-        _fig1.add_trace(go.Scatter(x=_days, y=prices, name="Price", mode="lines",
-                                   line=dict(color=_colours["price"], width=1),
-                                   showlegend=(_row == 1)),
-                        row=_row, col=1, secondary_y=True)
-    _fig1.update_xaxes(tickvals=_tick_doys, ticktext=_tick_labels, showgrid=True, gridcolor="#e5e5e5")
-    _fig1.update_yaxes(title_text="MWh/day", secondary_y=False, showgrid=True, gridcolor="#e5e5e5")
-    _fig1.update_yaxes(title_text="€/MWh", secondary_y=True, showgrid=False)
-    _fig1.update_layout(
-        height=550, barmode="relative", plot_bgcolor="white",
-        margin=dict(t=60, b=40, l=60, r=60),
-        legend=dict(orientation="h", yanchor="bottom", y=0.98, xanchor="left", x=0),
-    )
+        _fig.add_trace(go.Bar(x=_days, y=_res["charge"], name="Charge", marker_color=_col,
+                              opacity=0.7, showlegend=(_row == 1)),
+                       row=_row, col=1, secondary_y=False)
+        _fig.add_trace(go.Bar(x=_days, y=-_res["discharge"], name="Discharge",
+                              marker_color=_col, opacity=0.4, showlegend=(_row == 1)),
+                       row=_row, col=1, secondary_y=False)
+        _fig.add_trace(go.Scatter(x=_days, y=prices, name="Price", mode="lines",
+                                  line=dict(color=_colours["price"], width=1),
+                                  showlegend=(_row == 1),
+                                  hovertemplate="Day %{x}<br>%{y:.1f} €/MWh<extra></extra>"),
+                       row=_row, col=1, secondary_y=True)
 
-    # --- SoC comparison ---
-    _fig2 = go.Figure()
-    _fig2.add_trace(go.Scatter(x=_days, y=pf["soc"], name="Perfect foresight",
-                               mode="lines", line=dict(color=_colours["pf"], width=1.5),
-                               hovertemplate="Day %{x}<br>%{y:.1f} MWh<extra></extra>"))
-    _fig2.add_trace(go.Scatter(x=_days, y=mpc["soc"], name="MPC",
-                               mode="lines", line=dict(color=_colours["mpc"], width=1.5),
-                               hovertemplate="Day %{x}<br>%{y:.1f} MWh<extra></extra>"))
-    _fig2.update_layout(
-        title="State of Charge",
-        xaxis=dict(tickvals=_tick_doys, ticktext=_tick_labels, showgrid=True, gridcolor="#e5e5e5"),
-        yaxis=dict(title="MWh", showgrid=True, gridcolor="#e5e5e5"),
-        plot_bgcolor="white",
-        height=300, margin=dict(t=50, b=40, l=60, r=60),
-        legend=dict(orientation="h", yanchor="bottom", y=0.98, xanchor="left", x=0),
-    )
+    # Row 3: State of charge (legend2)
+    _fig.add_trace(go.Scatter(x=_days, y=pf["soc"], name="Perfect foresight",
+                              legend="legend2", mode="lines",
+                              line=dict(color=_colours["pf"], width=1.5),
+                              hovertemplate="Day %{x}<br>%{y:.1f} MWh<extra></extra>"),
+                   row=3, col=1)
+    _fig.add_trace(go.Scatter(x=_days, y=mpc["soc"], name="MPC",
+                              legend="legend2", mode="lines",
+                              line=dict(color=_colours["mpc"], width=1.5),
+                              hovertemplate="Day %{x}<br>%{y:.1f} MWh<extra></extra>"),
+                   row=3, col=1)
 
-    # --- Cumulative cost ---
+    # Row 4: Cumulative cost (legend3)
     _baseline_daily = prices * demand / cop_value
     _pf_daily = prices * pf["hp_output"] / cop_value
     _mpc_daily = prices * mpc["hp_output"] / cop_value
-    _fig3 = go.Figure()
-    _fig3.add_trace(go.Scatter(x=_days, y=np.cumsum(_baseline_daily), name="Baseline (no storage)",
-                               mode="lines", line=dict(color=_colours["baseline"], width=1.5, dash="dash"),
-                               hovertemplate="Day %{x}<br>%{y:,.0f} €<extra></extra>"))
-    _fig3.add_trace(go.Scatter(x=_days, y=np.cumsum(_pf_daily), name="Perfect foresight",
-                               mode="lines", line=dict(color=_colours["pf"], width=1.5),
-                               hovertemplate="Day %{x}<br>%{y:,.0f} €<extra></extra>"))
-    _fig3.add_trace(go.Scatter(x=_days, y=np.cumsum(_mpc_daily), name="MPC",
-                               mode="lines", line=dict(color=_colours["mpc"], width=1.5),
-                               hovertemplate="Day %{x}<br>%{y:,.0f} €<extra></extra>"))
-    _fig3.update_layout(
-        title="Cumulative Electricity Cost",
-        xaxis=dict(tickvals=_tick_doys, ticktext=_tick_labels, showgrid=True, gridcolor="#e5e5e5"),
-        yaxis=dict(title="€", showgrid=True, gridcolor="#e5e5e5"),
-        plot_bgcolor="white",
-        height=300, margin=dict(t=50, b=40, l=60, r=60),
-        legend=dict(orientation="h", yanchor="bottom", y=0.98, xanchor="left", x=0),
-    )
+    _fig.add_trace(go.Scatter(x=_days, y=np.cumsum(_baseline_daily), name="Baseline (no storage)",
+                              legend="legend3", mode="lines",
+                              line=dict(color=_colours["baseline"], width=1.5, dash="dash"),
+                              hovertemplate="Day %{x}<br>%{y:,.0f} €<extra></extra>"),
+                   row=4, col=1)
+    _fig.add_trace(go.Scatter(x=_days, y=np.cumsum(_pf_daily), name="Perfect foresight",
+                              legend="legend3", mode="lines",
+                              line=dict(color=_colours["pf"], width=1.5),
+                              hovertemplate="Day %{x}<br>%{y:,.0f} €<extra></extra>"),
+                   row=4, col=1)
+    _fig.add_trace(go.Scatter(x=_days, y=np.cumsum(_mpc_daily), name="MPC",
+                              legend="legend3", mode="lines",
+                              line=dict(color=_colours["mpc"], width=1.5),
+                              hovertemplate="Day %{x}<br>%{y:,.0f} €<extra></extra>"),
+                   row=4, col=1)
 
-    mo.vstack([_fig1, _fig2, _fig3])
-    return
+    # row_heights=[0.27,0.27,0.23,0.23], vspacing=0.07 → row tops: 1.0, 0.717, 0.433, 0.182
+    _legend_style = dict(orientation="h", xanchor="left", x=0.01,
+                         bgcolor="rgba(255,255,255,0.8)", bordercolor="#e5e5e5", borderwidth=1)
+    _fig.update_xaxes(tickvals=_tick_doys, ticktext=_tick_labels, showgrid=True, gridcolor="#e5e5e5")
+    _fig.update_yaxes(showgrid=True, gridcolor="#e5e5e5")
+    _fig.update_yaxes(title_text="MWh/day", secondary_y=False)
+    _fig.update_yaxes(title_text="€/MWh", secondary_y=True, showgrid=False)
+    _fig.update_yaxes(title_text="MWh", row=3, col=1)
+    _fig.update_yaxes(title_text="€", row=4, col=1)
+    _fig.update_layout(
+        barmode="relative",
+        plot_bgcolor="white",
+        height=1300,
+        margin=dict(t=60, b=40, l=60, r=60),
+        legend=dict(**_legend_style, yanchor="top", y=0.98),
+        legend2=dict(**_legend_style, yanchor="top", y=0.42),
+        legend3=dict(**_legend_style, yanchor="top", y=0.17),
+    )
+    _fig
 
 
 @app.cell
