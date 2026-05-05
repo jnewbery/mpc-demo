@@ -33,6 +33,7 @@ def run_mpc(
     storage_params: StorageParams,
     mpc_params: MPCParams,
     sim_params: SimulationParams,
+    seasonal_prices: np.ndarray | None = None,
 ) -> dict:
     """Run the rolling-horizon MPC controller.
 
@@ -77,7 +78,7 @@ def run_mpc(
     for t in range(T):
         H_window = min(mpc_params.H, T - t)
 
-        price_fc = get_forecast_window(t, H_window, true_prices, sim_params)
+        price_fc = get_forecast_window(t, H_window, true_prices, sim_params, seasonal_prices)
         demand_fc = true_demand[t : t + H_window]
 
         try:

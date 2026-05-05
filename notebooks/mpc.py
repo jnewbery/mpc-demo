@@ -11,14 +11,16 @@ app = marimo.App(width="full")
 
 @app.cell
 def _():
+    import dataclasses
+    import datetime
+    import pathlib
     import marimo as mo
     import numpy as np
+    import polars as pl
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
-    import sys
-    sys.path.insert(0, ".")
 
-    from src.simulation import SimulationParams, generate_price_series, generate_demand_series
+    from src.simulation import SimulationParams
     from src.storage_lp import StorageParams, solve_perfect_foresight
     from src.mpc import MPCParams, run_mpc
 
@@ -26,12 +28,14 @@ def _():
         MPCParams,
         SimulationParams,
         StorageParams,
-        generate_demand_series,
-        generate_price_series,
+        dataclasses,
+        datetime,
         go,
         make_subplots,
         mo,
         np,
+        pathlib,
+        pl,
         run_mpc,
         solve_perfect_foresight,
     )
@@ -65,40 +69,53 @@ def _(mo):
 
 
 @app.cell
+def _(mo, pathlib):
+    _price_dir = pathlib.Path(__file__).parent.parent / "data" / "price_scenarios"
+    _heat_dir = pathlib.Path(__file__).parent.parent / "data" / "heat_demand_scenarios"
+
+    _price_files = sorted(_price_dir.glob("*.csv"), key=lambda f: int("".join(filter(str.isdigit, f.stem)) or 0))
+    _heat_files = sorted(_heat_dir.glob("*.csv"), key=lambda f: int("".join(filter(str.isdigit, f.stem)) or 0))
+
+    price_scenario_selector = mo.ui.dropdown(
+        options={f.stem.replace("_", " ").title(): str(f) for f in _price_files},
+        value=_price_files[0].stem.replace("_", " ").title() if _price_files else None,
+        label="Price scenario",
+    )
+    heat_scenario_selector = mo.ui.dropdown(
+        options={f.stem.replace("_", " ").title(): str(f) for f in _heat_files},
+        value=_heat_files[0].stem.replace("_", " ").title() if _heat_files else None,
+        label="Heat demand scenario",
+    )
+    mo.hstack([price_scenario_selector, heat_scenario_selector], justify="start")
+    return heat_scenario_selector, price_scenario_selector
+
+
+@app.cell
 def _(mo):
-    sim_seed = mo.ui.number(start=0, stop=99999, step=1, value=42, label="Seed")
-    s_max = mo.ui.number(start=10, stop=10000, step=10, value=100, label="Storage capacity (MWh)")
-    s_min = mo.ui.number(start=0, stop=50, step=5, value=0, label="Min SoC (MWh)")
-    s0 = mo.ui.number(start=0, stop=200, step=5, value=50, label="Initial SoC (MWh)")
-    u_plus_max = mo.ui.number(start=5, stop=10000, step=5, value=50, label="Max charge rate (MWh/day)")
-    u_minus_max = mo.ui.number(start=5, stop=10000, step=5, value=50, label="Max discharge rate (MWh/day)")
+    s_max = mo.ui.number(start=10, stop=10_000, step=10, value=500, label="Storage capacity (MWh)")
+    s_min = mo.ui.number(start=0, stop=500, step=10, value=0, label="Min SoC (MWh)")
+    s0 = mo.ui.number(start=0, stop=10_000, step=10, value=250, label="Initial SoC (MWh)")
+    u_plus_max = mo.ui.number(start=5, stop=10_000, step=5, value=300, label="Max charge rate (MWh/day)")
+    u_minus_max = mo.ui.number(start=5, stop=10_000, step=5, value=300, label="Max discharge rate (MWh/day)")
     eta = mo.ui.slider(start=0.5, stop=1.0, step=0.05, value=0.9, label="Discharge efficiency η", show_value=True)
     cop = mo.ui.slider(start=1.0, stop=5.0, step=0.25, value=3.0, label="Heat pump COP", show_value=True)
-    h_max = mo.ui.number(start=10, stop=300, step=10, value=100, label="Max HP output (MWh/day)")
+    h_max = mo.ui.number(start=10, stop=10_000, step=10, value=600, label="Max HP output (MWh/day)")
     mpc_horizon = mo.ui.slider(start=1, stop=90, step=1, value=30, label="MPC horizon H (days)", show_value=True)
+    forecast_horizon = mo.ui.range_slider(
+        start=0, stop=90, value=[7, 30], step=1,
+        label="Forecast horizon: short-term / long-term (days)",
+        show_value=True,
+    )
 
     mo.vstack([
-        mo.md("### Simulation"),
-        mo.hstack([sim_seed], justify="start"),
         mo.md("### Storage"),
         mo.hstack([s_max, s_min, s0, u_plus_max, u_minus_max], justify="start"),
         mo.md("### Heat pump"),
         mo.hstack([eta, cop, h_max], justify="start"),
         mo.md("### MPC"),
-        mo.hstack([mpc_horizon], justify="start"),
+        mo.hstack([mpc_horizon, forecast_horizon], justify="start"),
     ])
-    return (
-        cop,
-        eta,
-        h_max,
-        mpc_horizon,
-        s0,
-        s_max,
-        s_min,
-        sim_seed,
-        u_minus_max,
-        u_plus_max,
-    )
+    return cop, eta, forecast_horizon, h_max, mpc_horizon, s0, s_max, s_min, u_minus_max, u_plus_max
 
 
 @app.cell
@@ -107,24 +124,27 @@ def _(
     SimulationParams,
     StorageParams,
     cop,
+    dataclasses,
     eta,
-    generate_demand_series,
-    generate_price_series,
+    forecast_horizon,
     h_max,
+    heat_scenario_selector,
     mo,
     mpc_horizon,
+    pl,
+    price_scenario_selector,
     run_mpc,
     s0,
     s_max,
     s_min,
-    sim_seed,
     solve_perfect_foresight,
     u_minus_max,
     u_plus_max,
 ):
-    _sim = SimulationParams(seed=sim_seed.value)
-    prices = generate_price_series(_sim)
-    demand = generate_demand_series(_sim)
+    _price_df = pl.read_csv(price_scenario_selector.value)
+    prices = _price_df.get_column("price").to_numpy()
+    seasonal_prices = _price_df.get_column("seasonal").to_numpy()
+    demand = pl.read_csv(heat_scenario_selector.value).get_column("heat_demand").to_numpy()
 
     _sp = StorageParams(
         s_max=s_max.value,
@@ -135,6 +155,12 @@ def _(
         eta=eta.value,
         cop=cop.value,
         h_max=h_max.value,
+    )
+    _short, _long = forecast_horizon.value
+    _sim = dataclasses.replace(
+        SimulationParams(T=len(prices)),
+        forecast_short_term=_short,
+        forecast_long_term=_long,
     )
     _mp = MPCParams(H=mpc_horizon.value)
 
@@ -149,7 +175,7 @@ def _(
         mo.stop(True, mo.callout(mo.md(f"**Perfect foresight solver error:** {pf_error}"), kind="danger"))
 
     try:
-        mpc = run_mpc(prices, demand, _sp, _mp, _sim)
+        mpc = run_mpc(prices, demand, _sp, _mp, _sim, seasonal_prices)
         mpc_error = None
     except Exception as e:
         mpc = None
@@ -163,11 +189,15 @@ def _(
 
 
 @app.cell
-def _(cop_value, demand, go, make_subplots, mo, mpc, np, pf, prices):
+def _(cop_value, datetime, demand, go, make_subplots, mo, mpc, np, pf, prices):
+    _tick_months = [datetime.date(2001, m, 1) for m in range(1, 13)]
+    _tick_doys = [d.timetuple().tm_yday for d in _tick_months]
+    _tick_labels = [d.strftime("%b") for d in _tick_months]
+
     _days = np.arange(1, len(prices) + 1)
     _colours = {"pf": "#4a90d9", "mpc": "#e07b39", "price": "black", "baseline": "grey"}
 
-    # --- Dispatch comparison (two subplots stacked, each with secondary y for price) ---
+    # --- Dispatch comparison ---
     _fig1 = make_subplots(
         rows=2, cols=1, shared_xaxes=True,
         subplot_titles=("Perfect Foresight Dispatch", "MPC Dispatch"),
@@ -185,25 +215,30 @@ def _(cop_value, demand, go, make_subplots, mo, mpc, np, pf, prices):
                                    line=dict(color=_colours["price"], width=1),
                                    showlegend=(_row == 1)),
                         row=_row, col=1, secondary_y=True)
-    _fig1.update_yaxes(title_text="MWh/day", secondary_y=False)
-    _fig1.update_yaxes(title_text="£/MWh", secondary_y=True, showgrid=False)
+    _fig1.update_xaxes(tickvals=_tick_doys, ticktext=_tick_labels, showgrid=True, gridcolor="#e5e5e5")
+    _fig1.update_yaxes(title_text="MWh/day", secondary_y=False, showgrid=True, gridcolor="#e5e5e5")
+    _fig1.update_yaxes(title_text="€/MWh", secondary_y=True, showgrid=False)
     _fig1.update_layout(
-        height=550, barmode="relative",
+        height=550, barmode="relative", plot_bgcolor="white",
         margin=dict(t=60, b=40, l=60, r=60),
-        legend=dict(orientation="h", yanchor="bottom", y=1.04, xanchor="left", x=0),
+        legend=dict(orientation="h", yanchor="bottom", y=0.98, xanchor="left", x=0),
     )
 
     # --- SoC comparison ---
     _fig2 = go.Figure()
     _fig2.add_trace(go.Scatter(x=_days, y=pf["soc"], name="Perfect foresight",
-                               mode="lines", line=dict(color=_colours["pf"], width=1.5)))
+                               mode="lines", line=dict(color=_colours["pf"], width=1.5),
+                               hovertemplate="Day %{x}<br>%{y:.1f} MWh<extra></extra>"))
     _fig2.add_trace(go.Scatter(x=_days, y=mpc["soc"], name="MPC",
-                               mode="lines", line=dict(color=_colours["mpc"], width=1.5)))
+                               mode="lines", line=dict(color=_colours["mpc"], width=1.5),
+                               hovertemplate="Day %{x}<br>%{y:.1f} MWh<extra></extra>"))
     _fig2.update_layout(
         title="State of Charge",
-        xaxis_title="Day of year", yaxis_title="MWh",
-        height=300, margin=dict(t=50, b=40, l=60, r=20),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        xaxis=dict(tickvals=_tick_doys, ticktext=_tick_labels, showgrid=True, gridcolor="#e5e5e5"),
+        yaxis=dict(title="MWh", showgrid=True, gridcolor="#e5e5e5"),
+        plot_bgcolor="white",
+        height=300, margin=dict(t=50, b=40, l=60, r=60),
+        legend=dict(orientation="h", yanchor="bottom", y=0.98, xanchor="left", x=0),
     )
 
     # --- Cumulative cost ---
@@ -212,16 +247,21 @@ def _(cop_value, demand, go, make_subplots, mo, mpc, np, pf, prices):
     _mpc_daily = prices * mpc["hp_output"] / cop_value
     _fig3 = go.Figure()
     _fig3.add_trace(go.Scatter(x=_days, y=np.cumsum(_baseline_daily), name="Baseline (no storage)",
-                               mode="lines", line=dict(color=_colours["baseline"], width=1.5, dash="dash")))
+                               mode="lines", line=dict(color=_colours["baseline"], width=1.5, dash="dash"),
+                               hovertemplate="Day %{x}<br>%{y:,.0f} €<extra></extra>"))
     _fig3.add_trace(go.Scatter(x=_days, y=np.cumsum(_pf_daily), name="Perfect foresight",
-                               mode="lines", line=dict(color=_colours["pf"], width=1.5)))
+                               mode="lines", line=dict(color=_colours["pf"], width=1.5),
+                               hovertemplate="Day %{x}<br>%{y:,.0f} €<extra></extra>"))
     _fig3.add_trace(go.Scatter(x=_days, y=np.cumsum(_mpc_daily), name="MPC",
-                               mode="lines", line=dict(color=_colours["mpc"], width=1.5)))
+                               mode="lines", line=dict(color=_colours["mpc"], width=1.5),
+                               hovertemplate="Day %{x}<br>%{y:,.0f} €<extra></extra>"))
     _fig3.update_layout(
         title="Cumulative Electricity Cost",
-        xaxis_title="Day of year", yaxis_title="£",
-        height=300, margin=dict(t=50, b=40, l=60, r=20),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        xaxis=dict(tickvals=_tick_doys, ticktext=_tick_labels, showgrid=True, gridcolor="#e5e5e5"),
+        yaxis=dict(title="€", showgrid=True, gridcolor="#e5e5e5"),
+        plot_bgcolor="white",
+        height=300, margin=dict(t=50, b=40, l=60, r=60),
+        legend=dict(orientation="h", yanchor="bottom", y=0.98, xanchor="left", x=0),
     )
 
     mo.vstack([_fig1, _fig2, _fig3])
@@ -236,10 +276,10 @@ def _(cop_value, demand, mo, mpc, np, pf, prices):
     _info_gap = mpc["cost"] - pf["cost"]
 
     mo.hstack([
-        mo.stat(value=f"£{_baseline:,.0f}", label="Baseline (no storage)"),
-        mo.stat(value=f"£{pf['cost']:,.0f}  ({100 * _pf_saving / _baseline:.1f}% saved)", label="Perfect foresight"),
-        mo.stat(value=f"£{mpc['cost']:,.0f}  ({100 * _mpc_saving / _baseline:.1f}% saved)", label="MPC"),
-        mo.stat(value=f"£{_info_gap:,.0f}", label="Cost of price uncertainty"),
+        mo.stat(value=f"€{_baseline:,.0f}", label="Baseline (no storage)"),
+        mo.stat(value=f"€{pf['cost']:,.0f}  ({100 * _pf_saving / _baseline:.1f}% saved)", label="Perfect foresight"),
+        mo.stat(value=f"€{mpc['cost']:,.0f}  ({100 * _mpc_saving / _baseline:.1f}% saved)", label="MPC"),
+        mo.stat(value=f"€{_info_gap:,.0f}", label="Cost of price uncertainty"),
         mo.stat(value=str(mpc["n_fallbacks"]), label="MPC fallbacks"),
     ], justify="start")
     return

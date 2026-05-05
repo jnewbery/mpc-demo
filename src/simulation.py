@@ -256,6 +256,7 @@ def get_forecast_window(
     H: int,
     true_prices: np.ndarray,
     params: SimulationParams,
+    seasonal_array: np.ndarray | None = None,
 ) -> np.ndarray:
     """Return a 1-D blended forecast window of length H starting at time t.
 
@@ -268,16 +269,19 @@ def get_forecast_window(
     H : int — MPC horizon length
     true_prices : np.ndarray of shape (T,)
     params : SimulationParams
+    seasonal_array : optional pre-computed seasonal baseline of shape (T,);
+        if None, the synthetic formula from SimulationParams is used.
 
     Returns
     -------
     np.ndarray of shape (H,)
     """
     rng = np.random.default_rng(params.seed + 2 + t)
-    dev = _forecast_deviation(t, true_prices, H, params, rng)
+    s_arr = seasonal_array if seasonal_array is not None else _seasonal_at(np.arange(len(true_prices)), params)
+    dev = _forecast_deviation(t, true_prices, H, params, rng, s_arr)
     horizons = np.arange(H)
     alpha = _forecast_alpha(horizons, params)
-    s = _seasonal_at(t + horizons, params)
+    s = s_arr[(t + horizons) % len(s_arr)]
     return s + alpha * dev
 
 
